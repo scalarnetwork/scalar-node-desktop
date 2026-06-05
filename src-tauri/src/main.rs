@@ -30,9 +30,9 @@ fn encrypt_keystore_cmd(
         .map_err(|_| "Genesis hash must be 32 bytes".to_string())?;
 
     let node_id_full = keygen::derive_node_id_full(&mnemonic, &genesis_hash_bytes, &keygen::TIER_C)?;
-    let node_key_seed = keygen::generate_node_key_seed();
+    let node_key = keygen::derive_node_key(&mnemonic, &genesis_hash_bytes)?;
 
-    let keystore = keygen::encrypt_keystore(&node_id_full, &node_key_seed, &passphrase)?;
+    let keystore = keygen::encrypt_keystore(&node_id_full, &node_key, &passphrase)?;
 
     Ok(base64::engine::general_purpose::STANDARD.encode(&keystore))
 }
@@ -52,7 +52,7 @@ fn deploy_node(
     key_path: String,
     keystore_base64: String,
     passphrase: String,
-    genesis_hash: String,
+    _genesis_hash: String, // embedded in keystore; VPS reads genesis_hash.txt
     dial_peers: Vec<String>,
 ) -> Result<String, String> {
     let config = SshConfig::new(&host, &username, &key_path);
@@ -63,12 +63,12 @@ fn deploy_node(
     config.upload_bytes(&keystore_bytes, "/tmp/node_keystore.bin", 0o600)
         .map_err(|e| format!("Failed to upload keystore: {}", e))?;
 
-    let passphrase_escaped = passphrase.replace('\'', "'\\''");
-    let cmd_create_passphrase = format!(
-        "sudo mkdir -p /etc/scalar && echo '{}' | sudo tee /etc/scalar/.passphrase > /dev/null && sudo chmod 600 /etc/scalar/.passphrase && sudo mv /tmp/node_keystore.bin /etc/scalar/node_keystore.bin && sudo chmod 600 /etc/scalar/node_keystore.bin",
-        passphrase_escaped
-    );
-    config.execute(&cmd_create_passphrase)
+    // Upload passphrase directly via SCP — never expose passphrase in shell commands
+    config.upload_bytes(passphrase.as_bytes(), "/tmp/.scalar_pp_tmp", 0o600)
+        .map_err(|e| format!("Failed to upload passphrase: {}", e))?;
+
+    let cmd_setup = "sudo mkdir -p /etc/scalar &&         sudo mv /tmp/.scalar_pp_tmp /etc/scalar/.passphrase &&         sudo chmod 600 /etc/scalar/.passphrase &&         sudo mv /tmp/node_keystore.bin /etc/scalar/node_keystore.bin &&         sudo chmod 600 /etc/scalar/node_keystore.bin";
+    config.execute(cmd_setup)
         .map_err(|e| format!("Failed to set up keystore on VPS: {}", e))?;
 
     let deploy_script = format!(
@@ -89,9 +89,10 @@ fi
 
 REPO_DIR="$HOME/scalar-core"
 if [ -d "$REPO_DIR" ]; then
-    echo "[3/5] Updating scalar-core..."
-    cd "$REPO_DIR" && git pull
-else
+    echo "[3/5] Recloning scalar-core (ensuring clean state)..."
+    rm -rf "$REPO_DIR"
+fi
+if [ ! -d "$REPO_DIR" ]; then
     echo "[3/5] Cloning scalar-core..."
     git clone https://github.com/berdywandara/scalar-core.git "$REPO_DIR"
 fi
@@ -128,7 +129,7 @@ sudo systemctl start scalar-node
 echo "✅ Node deployed successfully!"
 "#,
         username = username,
-        exec_start = "$HOME/scalar-core/target/release/scalar-node",
+        exec_start = "/home/{username}/scalar-core/target/release/scalar-node",
         dial_args = dial_peers.iter().map(|p| format!("--dial={}", p)).collect::<Vec<_>>().join(" ")
     );
 

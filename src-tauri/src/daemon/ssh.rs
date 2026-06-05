@@ -6,6 +6,8 @@
 //! - File upload via SCP
 //! - Real-time output streaming
 
+#![allow(dead_code)] // API surface — used by frontend commands
+
 use ssh2::Session;
 use std::io::{Read, Write};
 use std::net::TcpStream;
