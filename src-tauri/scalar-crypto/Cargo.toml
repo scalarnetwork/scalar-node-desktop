@@ -1,9 +1,7 @@
 [package]
 name = "scalar-crypto"
-version.workspace = true
-edition.workspace = true
-authors.workspace = true
-license.workspace = true
+version = "0.1.0"
+edition = "2021"
 
 [dependencies]
 p3-goldilocks = "0.5"
@@ -18,4 +16,4 @@ rand = "0.8"
 rand_core = "0.10.1"
 zeroize = { version = "1.8.2", features = ["derive"] }
 pqcrypto-kyber = "0.8.1"
-x25519-dalek    = { version = "2", features = ["static_secrets"] }
+x25519-dalek = { version = "2", features = ["static_secrets"] }
