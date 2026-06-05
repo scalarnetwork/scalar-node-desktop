@@ -149,7 +149,6 @@ echo "✅ Node deployed successfully!"
 
 fn main() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             generate_mnemonic_cmd,
             encrypt_keystore_cmd,
