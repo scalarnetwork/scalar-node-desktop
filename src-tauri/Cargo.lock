@@ -3127,9 +3127,11 @@ name = "scalar-node-desktop"
 version = "0.1.0"
 dependencies = [
  "argon2",
+ "base64 0.22.1",
  "bip39",
  "blake3",
  "chacha20poly1305",
+ "hex",
  "rand 0.8.6",
  "scalar-crypto",
  "serde",

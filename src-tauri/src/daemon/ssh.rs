@@ -122,12 +122,10 @@ impl SshConfig {
     ) -> Result<(), String> {
         let session = self.connect()?;
 
-        // Read local file
         let file_content = std::fs::read(local_path)
             .map_err(|e| format!("Failed to read local file {:?}: {}", local_path, e))?;
         let file_size = file_content.len() as u64;
 
-        // SCP send
         let mut channel = session
             .scp_send(Path::new(remote_path), mode, file_size, None)
             .map_err(|e| format!("Failed to open SCP channel: {}", e))?;
@@ -136,7 +134,6 @@ impl SshConfig {
             .write_all(&file_content)
             .map_err(|e| format!("Failed to write file via SCP: {}", e))?;
 
-        // Must send EOF before waiting for close
         channel
             .send_eof()
             .map_err(|e| format!("Failed to send EOF: {}", e))?;
@@ -147,6 +144,20 @@ impl SshConfig {
             .wait_close()
             .map_err(|e| format!("Failed to close SCP channel: {}", e))?;
 
+        Ok(())
+    }
+
+    /// Upload bytes directly to the remote host via SCP.
+    pub fn upload_bytes(&self, data: &[u8], remote_path: &str, mode: i32) -> Result<(), String> {
+        let session = self.connect()?;
+        let file_size = data.len() as u64;
+        let mut channel = session.scp_send(Path::new(remote_path), mode, file_size, None)
+            .map_err(|e| format!("Failed to open SCP channel: {}", e))?;
+        channel.write_all(data)
+            .map_err(|e| format!("Failed to write data via SCP: {}", e))?;
+        channel.send_eof().map_err(|e| format!("Failed to send EOF: {}", e))?;
+        channel.wait_eof().map_err(|e| format!("Failed to wait EOF: {}", e))?;
+        channel.wait_close().map_err(|e| format!("Failed to close SCP channel: {}", e))?;
         Ok(())
     }
 
