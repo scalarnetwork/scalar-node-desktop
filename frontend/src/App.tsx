@@ -176,7 +176,7 @@ export default function App() {
   const onTestConn = async () => {
     setDp(p => ({ ...p, connSt: 'testing', connMsg: '' }))
     try {
-      await invoke('test_connection_cmd', { host: dp.host, username: dp.user, keyPath: dp.keyPath })
+      await invoke('test_ssh_connection', { host: dp.host, username: dp.user, keyPath: dp.keyPath })
       setDp(p => ({ ...p, connSt: 'ok', connMsg: 'Connection successful' }))
     } catch (e) { setDp(p => ({ ...p, connSt: 'err', connMsg: String(e) })) }
   }
