@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod daemon;
+use sysinfo::System;
 mod gui;
 
 use daemon::keygen;
@@ -150,6 +151,19 @@ echo "✅ Node deployed successfully!"
     Ok(format!("Node deployed successfully to {}! Check status with: sudo systemctl status scalar-node", host))
 }
 
+#[tauri::command]
+fn get_system_ram() -> serde_json::Value {
+    let mut sys = System::new();
+    sys.refresh_memory();
+    let total_mb     = sys.total_memory()     / 1024 / 1024;
+    let available_mb = sys.available_memory() / 1024 / 1024;
+    serde_json::json!({
+        "total_mb":     total_mb,
+        "available_mb": available_mb,
+    })
+}
+
+
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -157,6 +171,7 @@ fn main() {
             encrypt_keystore_cmd,
             test_ssh_connection,
             deploy_node,
+            get_system_ram
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
