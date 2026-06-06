@@ -163,7 +163,7 @@ export default function App() {
     setKg(p => ({ ...p, step: 'deriving', err: '' }))
     try {
       const keystore: string = await invoke('encrypt_keystore_cmd', {
-        mnemonic: kg.mnemonic.join(' '), passphrase: kg.pass, genesisHash: kg.genesis,
+        mnemonic: kg.mnemonic, passphrase: kg.pass, genesisHash: kg.genesis,
       })
       setKg(p => ({ ...p, step: 'complete', keystore }))
       setDp(p => ({ ...p, keystore, genesis: kg.genesis, pass: kg.pass }))
