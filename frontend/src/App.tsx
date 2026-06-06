@@ -1,381 +1,522 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import './App.css'
 
-type Screen = 'keygen' | 'deploy'
-type KeygenStep = 'idle' | 'mnemonic' | 'confirm_word' | 'passphrase' | 'genesis' | 'deriving' | 'complete'
+// ── Types ────────────────────────────────────────────────────────
+type Tab    = 'keygen' | 'deploy'
+type KgStep = 'idle' | 'mnemonic' | 'confirm_word' | 'passphrase' | 'genesis' | 'deriving' | 'complete'
+type ConnSt = 'idle' | 'testing' | 'ok' | 'err'
+type DeplSt = 'idle' | 'deploying' | 'done' | 'error'
 
-interface KeygenState {
-  step: KeygenStep; mnemonic: string[]; revealed: boolean
-  word4Input: string; word4Error: string
-  passphrase: string; ppConfirm: string; ppError: string
-  genesisHash: string; keystoreB64: string; error: string
+interface KgState {
+  step: KgStep; mnemonic: string[]; revealed: boolean
+  word4: string; word4Err: string
+  pass: string; passConfirm: string; passErr: string
+  genesis: string; keystore: string; err: string
 }
-
-interface DeployState {
-  host: string; username: string; keyPath: string
-  keystoreB64: string; passphrase: string
-  genesisHash: string; dialPeers: string
-  status: 'idle'|'connecting'|'deploying'|'done'|'error'; output: string
+interface DpState {
+  host: string; user: string; keyPath: string
+  keystore: string; pass: string; genesis: string
+  peers: string; peersOpen: boolean; selNode: string
+  connSt: ConnSt; connMsg: string
+  deplSt: DeplSt; logs: LogLine[]
 }
+interface LogLine { type: 'cmd' | 'ok' | 'err' | 'inf'; text: string }
 
+// ── Constants ────────────────────────────────────────────────────
 const PEERS = [
-  '/ip4/132.145.39.75/tcp/17777','/ip4/132.226.130.138/tcp/17777',
-  '/ip4/145.241.205.71/tcp/17777','/ip4/140.238.72.52/tcp/17777',
-  '/ip4/140.238.91.78/tcp/17777',
+  '132.145.39.75:17777', '132.226.130.138:17777', '145.241.205.71:17777',
+  '140.238.72.52:17777', '140.238.91.78:17777',
 ].join('\n')
 
-const KG0: KeygenState = {
-  step:'idle', mnemonic:[], revealed:false,
-  word4Input:'', word4Error:'',
-  passphrase:'', ppConfirm:'', ppError:'',
-  genesisHash:'', keystoreB64:'', error:'',
-}
-
-const STEPS: {key:KeygenStep, label:string}[] = [
-  {key:'idle',label:'Generate'},{key:'mnemonic',label:'Record'},
-  {key:'confirm_word',label:'Confirm'},{key:'passphrase',label:'Passphrase'},
-  {key:'genesis',label:'Genesis'},{key:'deriving',label:'Derive'},
-]
-
 const NODES = [
-  {name:'node-1',ip:'132.145.39.75',key:'scalar-node-1.key.key'},
-  {name:'node-2',ip:'132.226.130.138',key:'scalar-node-2.key.key'},
-  {name:'node-3',ip:'145.241.205.71',key:'scalar-node-3.key.key'},
-  {name:'node-4',ip:'140.238.72.52',key:'scalar-node-4.key.key'},
-  {name:'node-5',ip:'140.238.91.78',key:'scalar-node-5.key.key'},
+  { name: 'scalar-node-1', ip: '132.145.39.75',  key: 'scalar-node-1.key.key' },
+  { name: 'scalar-node-2', ip: '132.226.130.138', key: 'scalar-node-2.key.key' },
+  { name: 'scalar-node-3', ip: '145.241.205.71',  key: 'scalar-node-3.key.key' },
+  { name: 'scalar-node-4', ip: '140.238.72.52',   key: 'scalar-node-4.key.key' },
+  { name: 'scalar-node-5', ip: '140.238.91.78',   key: 'scalar-node-5.key.key' },
 ]
 
+const KG_STEPS: { key: KgStep; label: string }[] = [
+  { key: 'idle',         label: 'Generate'   },
+  { key: 'mnemonic',     label: 'Record'     },
+  { key: 'confirm_word', label: 'Confirm'    },
+  { key: 'passphrase',   label: 'Passphrase' },
+  { key: 'genesis',      label: 'Genesis'    },
+  { key: 'deriving',     label: 'Derive'     },
+  { key: 'complete',     label: 'Complete'   },
+]
+const KG_ORDER: KgStep[] = KG_STEPS.map(s => s.key)
+
+// ── Icons (inline SVG) ────────────────────────────────────────────
+const LogoMark = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" className="logo-sym">
+    <rect x="1"   y="3" width="3" height="18" rx=".5" fill="currentColor"/>
+    <rect x="5"   y="3" width="3" height="18" rx=".5" fill="currentColor"/>
+    <rect x="9.5" y="7" width="5" height="10" rx=".5" fill="currentColor"/>
+    <rect x="16"  y="3" width="3" height="18" rx=".5" fill="currentColor"/>
+    <rect x="20"  y="3" width="3" height="18" rx=".5" fill="currentColor"/>
+  </svg>
+)
+const IKey = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="7.5" cy="15.5" r="5.5"/>
+    <path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/>
+  </svg>
+)
+const ISrv = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect width="20" height="8" x="2" y="2" rx="2"/>
+    <rect width="20" height="8" x="2" y="14" rx="2"/>
+    <line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/>
+  </svg>
+)
+const IEye = ({ off }: { off?: boolean }) => off ? (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/>
+    <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/>
+    <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/>
+    <line x1="2" x2="22" y1="2" y2="22"/>
+  </svg>
+) : (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
+    <circle cx="12" cy="12" r="3"/>
+  </svg>
+)
+const ICheck = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="20 6 9 17 4 12"/>
+  </svg>
+)
+const ICopy = ({ done }: { done?: boolean }) => done ? <ICheck /> : (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect width="14" height="14" x="8" y="8" rx="2"/>
+    <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+  </svg>
+)
+const IAlert = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+    <line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/>
+  </svg>
+)
+const IFolder = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+  </svg>
+)
+const IChev = ({ open }: { open: boolean }) => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+    style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>
+    <polyline points="6 9 12 15 18 9"/>
+  </svg>
+)
+
+// ── App ──────────────────────────────────────────────────────────
 export default function App() {
-  const [screen, setScreen] = useState<Screen>('keygen')
-  const [kg, setKg] = useState<KeygenState>(KG0)
-  const [dp, setDp] = useState<DeployState>({
-    host:'', username:'ubuntu', keyPath:'',
-    keystoreB64:'', passphrase:'', genesisHash:'',
-    dialPeers:PEERS, status:'idle', output:'',
+  const [tab,       setTab]       = useState<Tab>('keygen')
+  const [showPass,  setShowPass]  = useState(false)
+  const [showPassC, setShowPassC] = useState(false)
+  const [copied,    setCopied]    = useState<Record<string, boolean>>({})
+  const [kg, setKg] = useState<KgState>({
+    step: 'idle', mnemonic: [], revealed: false,
+    word4: '', word4Err: '', pass: '', passConfirm: '',
+    passErr: '', genesis: '', keystore: '', err: '',
   })
+  const [dp, setDp] = useState<DpState>({
+    host: '', user: 'ubuntu', keyPath: '', keystore: '',
+    pass: '', genesis: '', peers: PEERS, peersOpen: false, selNode: '',
+    connSt: 'idle', connMsg: '', deplSt: 'idle', logs: [],
+  })
+  const logRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
+  }, [dp.logs])
 
-  async function onGenerate() {
-    try {
-      const words = await invoke<string[]>('generate_mnemonic_cmd')
-      setKg(p => ({...p, step:'mnemonic', mnemonic:words, revealed:false, error:''}))
-    } catch(e) { setKg(p => ({...p, error:String(e)})) }
+  // ── Helpers ───────────────────────────────────────────────────
+  const copy = (id: string, text: string) => {
+    navigator.clipboard.writeText(text)
+    setCopied(p => ({ ...p, [id]: true }))
+    setTimeout(() => setCopied(p => ({ ...p, [id]: false })), 2000)
   }
 
-  function onCheckWord4() {
-    if (kg.word4Input.trim().toLowerCase() === kg.mnemonic[3].toLowerCase())
-      setKg(p => ({...p, step:'passphrase', word4Error:''}))
+  // ── Keygen handlers ───────────────────────────────────────────
+  const onGenerate = async () => {
+    try {
+      const mnemonic: string[] = await invoke('generate_mnemonic_cmd')
+      setKg(p => ({ ...p, step: 'mnemonic', mnemonic, revealed: false, err: '' }))
+    } catch (e) { setKg(p => ({ ...p, err: String(e) })) }
+  }
+  const onCheckWord4 = () => {
+    if (kg.word4.trim().toLowerCase() === kg.mnemonic[3])
+      setKg(p => ({ ...p, step: 'passphrase', word4Err: '' }))
     else
-      setKg(p => ({...p, word4Error:`Incorrect — expected "${kg.mnemonic[3]}"`}))
+      setKg(p => ({ ...p, word4Err: 'Incorrect. Check your written copy and try again.' }))
   }
-
-  function onCheckPP() {
-    if (kg.passphrase.length < 8) { setKg(p=>({...p,ppError:'Minimum 8 characters'})); return }
-    if (kg.passphrase !== kg.ppConfirm) { setKg(p=>({...p,ppError:'Passphrases do not match'})); return }
-    setKg(p=>({...p, step:'genesis', ppError:''}))
+  const onNextPass = () => {
+    if (kg.pass.length < 8) { setKg(p => ({ ...p, passErr: 'Minimum 8 characters.' })); return }
+    if (kg.pass !== kg.passConfirm) { setKg(p => ({ ...p, passErr: 'Passphrases do not match.' })); return }
+    setKg(p => ({ ...p, step: 'genesis', passErr: '' }))
   }
-
-  async function onDerive() {
-    if (kg.genesisHash.length !== 64) { setKg(p=>({...p,error:'Genesis hash must be 64 hex chars'})); return }
-    setKg(p=>({...p, step:'deriving', error:''}))
+  const onDeriveKeys = async () => {
+    setKg(p => ({ ...p, step: 'deriving', err: '' }))
     try {
-      const b64 = await invoke<string>('encrypt_keystore_cmd', {
-        mnemonic:kg.mnemonic, genesisHash:kg.genesisHash, passphrase:kg.passphrase,
+      const keystore: string = await invoke('encrypt_keystore_cmd', {
+        mnemonic: kg.mnemonic.join(' '), passphrase: kg.pass, genesisHash: kg.genesis,
       })
-      setKg(p=>({...p, step:'complete', keystoreB64:b64}))
-    } catch(e) { setKg(p=>({...p, step:'genesis', error:String(e)})) }
+      setKg(p => ({ ...p, step: 'complete', keystore }))
+      setDp(p => ({ ...p, keystore, genesis: kg.genesis, pass: kg.pass }))
+    } catch (e) { setKg(p => ({ ...p, step: 'genesis', err: String(e) })) }
   }
 
-  async function onTestSSH() {
-    setDp(p=>({...p, status:'connecting', output:'Testing SSH connection...'}))
+  // ── Deploy handlers ───────────────────────────────────────────
+  const addLog = (type: LogLine['type'], text: string) =>
+    setDp(p => ({ ...p, logs: [...p.logs, { type, text }] }))
+  const onTestConn = async () => {
+    setDp(p => ({ ...p, connSt: 'testing', connMsg: '' }))
     try {
-      const ok = await invoke<boolean>('test_ssh_connection', {host:dp.host, username:dp.username, keyPath:dp.keyPath})
-      setDp(p=>({...p, status:ok?'idle':'error', output:ok?'✅ Connection successful':`❌ Connection failed`}))
-    } catch(e) { setDp(p=>({...p, status:'error', output:`❌ ${e}`})) }
+      await invoke('test_connection_cmd', { host: dp.host, username: dp.user, keyPath: dp.keyPath })
+      setDp(p => ({ ...p, connSt: 'ok', connMsg: 'Connection successful' }))
+    } catch (e) { setDp(p => ({ ...p, connSt: 'err', connMsg: String(e) })) }
   }
-
-  async function onDeploy() {
-    setDp(p=>({...p, status:'deploying', output:'[1/5] Starting deployment...\nThis takes 10–20 min (Rust compilation).'}))
+  const onDeploy = async () => {
+    setDp(p => ({ ...p, deplSt: 'deploying', logs: [] }))
+    addLog('inf', `Deploying to ${dp.host}…`)
     try {
-      const result = await invoke<string>('deploy_node', {
-        host:dp.host, username:dp.username, keyPath:dp.keyPath,
-        keystoreBase64:dp.keystoreB64, passphrase:dp.passphrase,
-        genesisHash:dp.genesisHash||'0'.repeat(64),
-        dialPeers:dp.dialPeers.split('\n').map(s=>s.trim()).filter(Boolean),
+      await invoke('deploy_node', {
+        host: dp.host, username: dp.user, keyPath: dp.keyPath,
+        keystore: dp.keystore, passphrase: dp.pass, genesisHash: dp.genesis,
+        bootstrapPeers: dp.peers.split('\n').filter(Boolean),
       })
-      setDp(p=>({...p, status:'done', output:result}))
-    } catch(e) { setDp(p=>({...p, status:'error', output:`❌ Deployment failed:\n${e}`})) }
+      addLog('ok', 'Node deployed and service started.')
+      setDp(p => ({ ...p, deplSt: 'done' }))
+    } catch (e) { addLog('err', String(e)); setDp(p => ({ ...p, deplSt: 'error' })) }
   }
 
-  const si = STEPS.findIndex(s=>s.key===kg.step)
-  const done = kg.step==='complete'
+  // ── Step indicator ────────────────────────────────────────────
+  const curIdx = KG_ORDER.indexOf(kg.step)
+  const renderSteps = () => (
+    <div className="step-ind">
+      {KG_STEPS.map((s, i) => {
+        const done   = i < curIdx
+        const active = i === curIdx
+        const cc = done ? 'step-cir--d' : active ? 'step-cir--a' : 'step-cir--p'
+        const lc = done ? 'step-lbl--d' : active ? 'step-lbl--a' : ''
+        return (
+          <div key={s.key} className="step-item">
+            <div className="step-node">
+              <div className={`step-cir ${cc}`}>{done ? '✓' : i + 1}</div>
+              <span className={`step-lbl ${lc}`}>{s.label}</span>
+            </div>
+            {i < KG_STEPS.length - 1 && <div className={`step-con${done ? ' step-con--d' : ''}`} />}
+          </div>
+        )
+      })}
+    </div>
+  )
 
-  return (
-    <div className="app">
-      <header className="hdr">
-        <div className="brand">
-          <span className="brand-diamond">◆</span>
-          <span className="brand-name">SCALAR NODE</span>
-          <span className="brand-tag">v0.1 · Tier C Testnet</span>
+  // ── Keygen steps ──────────────────────────────────────────────
+  const renderKg = () => { switch (kg.step) {
+    case 'idle': return (
+      <div className="card kg-card kg-gen">
+        <div className="kg-ico"><IKey /></div>
+        <h2 className="kg-h">Generate Node Keys</h2>
+        <p className="kg-sub">Create a 12-word mnemonic (121-bit entropy). Store in cold storage before proceeding.</p>
+        <div className="warn-box" style={{ maxWidth: 400, textAlign: 'left' }}>
+          ⚠ Your mnemonic is the <strong>only recovery path</strong>. Write it down first.
         </div>
-        <nav className="tabs">
-          <button className={`tab${screen==='keygen'?' tab-on':''}`} onClick={()=>setScreen('keygen')}>KEYGEN</button>
-          <button className={`tab${screen==='deploy'?' tab-on':''}`} onClick={()=>setScreen('deploy')}>DEPLOY</button>
+        {kg.err && <div className="err-box" style={{ maxWidth: 400 }}>{kg.err}</div>}
+        <button className="btn btn-p" style={{ minWidth: 240 }} onClick={onGenerate}>Generate Mnemonic</button>
+      </div>
+    )
+    case 'mnemonic': return (
+      <div className="card kg-card">
+        <div className="mn-warn">
+          <IAlert />
+          <span className="mn-warn-txt">Write all 12 words in order. Store offline. Do not photograph.</span>
+        </div>
+        <div className="mn-hdr">
+          <span className="mn-hdr-t">MNEMONIC — 12 WORDS</span>
+          <button className="btn btn-g btn-sm" onClick={() => setKg(p => ({ ...p, revealed: !p.revealed }))}>
+            <IEye off={kg.revealed} />{kg.revealed ? 'Hide' : 'Reveal'}
+          </button>
+        </div>
+        <div className="mn-grid">
+          {kg.mnemonic.map((w, i) => (
+            <div key={i} className={`mn-word${i === 0 ? ' mn-word-f' : ''}`}>
+              <span className="mn-num">{i + 1}</span>
+              <span className={`mn-txt${kg.revealed ? '' : ' mn-txt-b'}`}>{w}</span>
+            </div>
+          ))}
+        </div>
+        <div className="mn-foot">
+          <button className="btn btn-p" disabled={!kg.revealed}
+            onClick={() => setKg(p => ({ ...p, step: 'confirm_word' }))}>
+            I've Written It Down →
+          </button>
+        </div>
+      </div>
+    )
+    case 'confirm_word': return (
+      <div className="card kg-card cf-step">
+        <p style={{ fontSize: 'var(--lg)', fontWeight: 'var(--fw6)', color: 'var(--t1)', margin: 0 }}>
+          Verify your mnemonic
+        </p>
+        <p style={{ fontSize: 'var(--base)', color: 'var(--t2)', margin: 0 }}>
+          Enter <span className="cf-hint">word #4</span> to confirm it was recorded correctly.
+        </p>
+        <div className="field" style={{ width: '100%', maxWidth: 280, textAlign: 'left' }}>
+          <label className="fld-lbl">Word #4</label>
+          <input className={`inp${kg.word4Err ? ' inp-err' : ''}`} type="text"
+            value={kg.word4} autoFocus placeholder="type word here…"
+            onChange={e => setKg(p => ({ ...p, word4: e.target.value, word4Err: '' }))}
+            onKeyDown={e => e.key === 'Enter' && onCheckWord4()} />
+          {kg.word4Err && <span className="fld-err">{kg.word4Err}</span>}
+        </div>
+        <button className="btn btn-p" disabled={!kg.word4.trim()} onClick={onCheckWord4}>Confirm →</button>
+      </div>
+    )
+    case 'passphrase': return (
+      <div className="card kg-card">
+        <div className="card-sec-hdr">KEYSTORE PASSPHRASE</div>
+        <p className="mb4" style={{ fontSize: 'var(--base)', color: 'var(--t2)' }}>
+          Encrypts your keystore. Required every time the node starts.
+        </p>
+        <div className="fstk mb5">
+          <div className="field">
+            <label className="fld-lbl">Passphrase</label>
+            <div className="inp-wrap">
+              <input className="inp" type={showPass ? 'text' : 'password'} value={kg.pass}
+                placeholder="min. 8 characters"
+                onChange={e => setKg(p => ({ ...p, pass: e.target.value, passErr: '' }))} />
+              <button className="inp-ico" type="button" onClick={() => setShowPass(v => !v)}>
+                <IEye off={showPass} />
+              </button>
+            </div>
+          </div>
+          <div className="field">
+            <label className="fld-lbl">Confirm Passphrase</label>
+            <div className="inp-wrap">
+              <input className={`inp${kg.passErr ? ' inp-err' : ''}`}
+                type={showPassC ? 'text' : 'password'} value={kg.passConfirm}
+                placeholder="repeat passphrase"
+                onChange={e => setKg(p => ({ ...p, passConfirm: e.target.value, passErr: '' }))}
+                onKeyDown={e => e.key === 'Enter' && onNextPass()} />
+              <button className="inp-ico" type="button" onClick={() => setShowPassC(v => !v)}>
+                <IEye off={showPassC} />
+              </button>
+            </div>
+            {kg.passErr && <span className="fld-err">{kg.passErr}</span>}
+          </div>
+        </div>
+        <button className="btn btn-p btn-full" disabled={!kg.pass || !kg.passConfirm} onClick={onNextPass}>
+          Set Passphrase →
+        </button>
+      </div>
+    )
+    case 'genesis': return (
+      <div className="card kg-card">
+        <div className="card-sec-hdr">GENESIS HASH</div>
+        <p className="mb4" style={{ fontSize: 'var(--base)', color: 'var(--t2)' }}>
+          Binds your NodeID to this network.
+        </p>
+        <div className="field mb5">
+          <label className="fld-lbl">Genesis Hash <span style={{ fontWeight: 400 }}>(64 hex chars)</span></label>
+          <input className="inp inp-mono" type="text" value={kg.genesis}
+            placeholder="a69bef803747742c…" maxLength={64}
+            onChange={e => setKg(p => ({ ...p, genesis: e.target.value.toLowerCase().trim(), err: '' }))} />
+          <span className="fld-hint">{kg.genesis.length}/64</span>
+        </div>
+        {kg.err && <div className="err-box mb4">{kg.err}</div>}
+        <button className="btn btn-p btn-full" disabled={kg.genesis.length !== 64} onClick={onDeriveKeys}>
+          Derive Keys →
+        </button>
+      </div>
+    )
+    case 'deriving': return (
+      <div className="card kg-card drv-step">
+        <div className="drv-bars">{[1, 2, 3, 4, 5].map(n => <div key={n} className="drv-bar" />)}</div>
+        <p className="drv-lbl">Deriving keys via Argon2id…</p>
+        <p className="drv-sub">Tier C: 16 MB · 100 iterations · ~1–5 minutes</p>
+        <div className="prg-track"><div className="prg-fill" /></div>
+      </div>
+    )
+    case 'complete': return (
+      <div className="card kg-card">
+        <div className="ok-banner"><ICheck /><span className="ok-banner-txt">Keygen complete — keystore encrypted</span></div>
+        <div className="kd-row">
+          <span className="kd-lbl">Encrypted Keystore (base64 · 121 bytes)</span>
+          <div className="kd-val-wrap">
+            <span className="kd-val">{kg.keystore}</span>
+            <button className={`btn-cp${copied['ks'] ? ' cp-ok' : ''}`}
+              onClick={() => copy('ks', kg.keystore)}>
+              <ICopy done={copied['ks']} />
+            </button>
+          </div>
+        </div>
+        <div className="cmp-actions">
+          <button className="btn btn-s" onClick={() => setKg(p => ({
+            ...p, step: 'idle', mnemonic: [], keystore: '',
+            genesis: '', pass: '', passConfirm: '', err: '',
+          }))}>Start Over</button>
+          <button className="btn btn-p" onClick={() => setTab('deploy')}>Go to Deploy →</button>
+        </div>
+      </div>
+    )
+    default: return null
+  }}
+
+  // ── Render ────────────────────────────────────────────────────
+  return (
+    <div className="app-root">
+      <header className="hdr" data-tauri-drag-region>
+        <div className="hdr__logo"><LogoMark /><span className="logo-txt">SCALAR NETWORK</span></div>
+        <nav className="hdr__nav">
+          <button className={`ntab${tab === 'keygen' ? ' on' : ''}`} onClick={() => setTab('keygen')}><IKey />Keygen</button>
+          <button className={`ntab${tab === 'deploy' ? ' on' : ''}`} onClick={() => setTab('deploy')}><ISrv />Deploy</button>
         </nav>
+        <div className="hdr__meta"><span className="net-badge"><span className="net-badge__dot" />Testnet</span></div>
       </header>
 
-      <main className="main">
-        {screen==='keygen' && (
-          <div className="page">
-            <div className="pg-title">
-              <h1>Node Keygen</h1>
-              <p>Generate cryptographic node identity · <code>SCALAR-TECHNICAL §10.5</code></p>
-            </div>
+      <main className="main"><div className="wrap">
 
-            <div className="steps">
-              {STEPS.map((s,i) => {
-                const d = done||i<si, a = i===si
-                return (
-                  <div key={s.key} className={`step${a?' step-a':''}${d?' step-d':''}`}>
-                    <span className="sn">{d?'✓':i+1}</span>
-                    <span className="sl">{s.label}</span>
-                    {i<STEPS.length-1 && <span className="sep">›</span>}
-                  </div>
-                )
-              })}
-            </div>
+        {tab === 'keygen' && (
+          <div className="kg-wrap">{renderSteps()}{renderKg()}</div>
+        )}
 
-            {kg.step==='idle' && (
+        {tab === 'deploy' && (
+          <div className="dp-layout">
+            <div className="dp-form">
+
               <div className="card">
-                <div className="cb cb-c">
-                  <p className="dim">Generate a 12-word mnemonic (CSPRNG · 121-bit entropy)</p>
-                  <div className="warn-box">⚠ Mnemonic is the only recovery path. Prepare cold storage first.</div>
-                  <button className="btn-p" onClick={onGenerate}>Generate Mnemonic</button>
+                <div className="card-sec-hdr">CONNECTION</div>
+                <div className="fstk mb2">
+                  <div className="f-row">
+                    <div className="field">
+                      <label className="fld-lbl">VPS IP Address</label>
+                      <input className="inp inp-mono" type="text" value={dp.host} placeholder="132.145.39.75"
+                        onChange={e => setDp(p => ({ ...p, host: e.target.value, connSt: 'idle', connMsg: '' }))} />
+                    </div>
+                    <div className="field">
+                      <label className="fld-lbl">Username</label>
+                      <input className="inp" type="text" value={dp.user}
+                        onChange={e => setDp(p => ({ ...p, user: e.target.value }))} />
+                    </div>
+                  </div>
+                  <div className="field">
+                    <label className="fld-lbl">SSH Key Path</label>
+                    <div className="inp-wrap">
+                      <input className="inp inp-mono" type="text" value={dp.keyPath}
+                        placeholder="C:\Users\HOPEX\.ssh\scalar-node-1.key.key"
+                        onChange={e => setDp(p => ({ ...p, keyPath: e.target.value }))} />
+                      <span className="inp-ico" style={{ pointerEvents: 'none' }}><IFolder /></span>
+                    </div>
+                  </div>
+                </div>
+                <div className="c-row">
+                  <button className="btn btn-s btn-sm"
+                    disabled={!dp.host || dp.connSt === 'testing'} onClick={onTestConn}>
+                    {dp.connSt === 'testing'
+                      ? <><span className="btn-spinner btn-spinner--dark" />Testing…</>
+                      : 'Test Connection'}
+                  </button>
+                  {dp.connSt === 'ok'  && <span className="c-st c-ok"><ICheck />{dp.connMsg}</span>}
+                  {dp.connSt === 'err' && <span className="c-st c-err">{dp.connMsg}</span>}
                 </div>
               </div>
-            )}
 
-            {kg.step==='mnemonic' && (
               <div className="card">
-                <div className="ch">
-                  <span>MNEMONIC — 12 WORDS</span>
-                  <button className="btn-g btn-sm" onClick={()=>setKg(p=>({...p,revealed:!p.revealed}))}>
-                    {kg.revealed?'🙈 Hide':'👁 Reveal'}
-                  </button>
+                <div className="card-sec-hdr">CREDENTIALS</div>
+                <div className="fstk">
+                  <div className="field">
+                    <label className="fld-lbl">Encrypted Keystore (base64)</label>
+                    <textarea className="inp ta inp-mono" rows={3} value={dp.keystore}
+                      placeholder="Paste keystore from Keygen tab…"
+                      onChange={e => setDp(p => ({ ...p, keystore: e.target.value }))} />
+                  </div>
+                  <div className="field">
+                    <label className="fld-lbl">Passphrase</label>
+                    <div className="inp-wrap">
+                      <input className="inp" type={showPass ? 'text' : 'password'} value={dp.pass}
+                        placeholder="Keystore passphrase"
+                        onChange={e => setDp(p => ({ ...p, pass: e.target.value }))} />
+                      <button className="inp-ico" type="button" onClick={() => setShowPass(v => !v)}>
+                        <IEye off={showPass} />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="field">
+                    <label className="fld-lbl">Genesis Hash</label>
+                    <input className="inp inp-mono" type="text" value={dp.genesis} placeholder="64-char hex"
+                      onChange={e => setDp(p => ({ ...p, genesis: e.target.value }))} />
+                  </div>
                 </div>
-                <div className={`mnem-grid${kg.revealed?'':' blurred'}`}>
-                  {kg.mnemonic.map((w,i)=>(
-                    <div key={i} className={`mw${i===0?' mw-first':''}`}>
-                      <span className="mn">{i+1}</span>
-                      <span className="mt">{w}</span>
+                <div className="coll-hdr" onClick={() => setDp(p => ({ ...p, peersOpen: !p.peersOpen }))}>
+                  <span>Bootstrap Peers ({dp.peers.split('\n').filter(Boolean).length})</span>
+                  <IChev open={dp.peersOpen} />
+                </div>
+                <div className={`coll-body${dp.peersOpen ? ' open' : ' closed'}`}>
+                  <textarea className="inp ta inp-mono mt2" rows={5} value={dp.peers}
+                    onChange={e => setDp(p => ({ ...p, peers: e.target.value }))} />
+                </div>
+              </div>
+
+              <button className="btn btn-p btn-full"
+                disabled={!dp.host || !dp.keystore || !dp.pass || dp.deplSt === 'deploying'}
+                onClick={onDeploy}>
+                {dp.deplSt === 'deploying' ? <><span className="btn-spinner" />Deploying…</>
+                  : dp.deplSt === 'done'   ? '✓  Deployed'
+                  : dp.deplSt === 'error'  ? 'Retry Deploy'
+                  : '▶  Deploy Node'}
+              </button>
+            </div>
+
+            <div className="dp-aside">
+              <div className="card" style={{ padding: 'var(--s4) var(--s5)' }}>
+                <div className="card-sec-hdr">ORACLE VPS — QUICK SELECT</div>
+                <div className="qs-list">
+                  {NODES.map(n => (
+                    <div key={n.name} className={`nr${dp.selNode === n.name ? ' sel' : ''}`}
+                      onClick={() => setDp(p => ({
+                        ...p, selNode: n.name, host: n.ip,
+                        keyPath: `C:\\Users\\HOPEX\\.ssh\\${n.key}`,
+                        connSt: 'idle', connMsg: '',
+                      }))}>
+                      <div className="nr-info">
+                        <span className="nr-name">{n.name}</span>
+                        <span className="nr-ip">{n.ip}</span>
+                      </div>
+                      <span style={{ fontSize: 'var(--xs)', color: 'var(--tp)' }}>Select →</span>
                     </div>
                   ))}
                 </div>
-                <div className="cf">
-                  <span className="dim sm">Write all 12 words in order. Store offline.</span>
-                  <button className="btn-p" onClick={()=>setKg(p=>({...p,step:'confirm_word'}))} disabled={!kg.revealed}>
-                    I've Written It Down →
-                  </button>
-                </div>
               </div>
-            )}
 
-            {kg.step==='confirm_word' && (
-              <div className="card">
-                <div className="ch">CONFIRM MNEMONIC</div>
-                <div className="cb">
-                  <p className="dim mb">Enter <strong>word #4</strong> to confirm you've recorded the mnemonic.</p>
-                  <div className="field">
-                    <label>Word #4</label>
-                    <input className="inp" type="text" value={kg.word4Input} autoFocus
-                      onChange={e=>setKg(p=>({...p,word4Input:e.target.value}))}
-                      onKeyDown={e=>e.key==='Enter'&&onCheckWord4()}
-                      placeholder="enter word..." />
-                    {kg.word4Error&&<span className="ferr">{kg.word4Error}</span>}
-                  </div>
-                  <button className="btn-p" onClick={onCheckWord4}>Confirm →</button>
+              <div className="log-panel">
+                <div className="lp-hdr">
+                  <span className="lp-ttl">OUTPUT</span>
+                  {dp.logs.length > 0 && <span className="lp-cnt">{dp.logs.length} lines</span>}
                 </div>
-              </div>
-            )}
-
-            {kg.step==='passphrase' && (
-              <div className="card">
-                <div className="ch">KEYSTORE PASSPHRASE</div>
-                <div className="cb">
-                  <p className="dim mb">Encrypts your keystore file. Min 8 characters. Must match at deploy time.</p>
-                  <div className="field">
-                    <label>Passphrase</label>
-                    <input className="inp" type="password" value={kg.passphrase} autoFocus
-                      onChange={e=>setKg(p=>({...p,passphrase:e.target.value}))} placeholder="••••••••" />
-                  </div>
-                  <div className="field">
-                    <label>Confirm Passphrase</label>
-                    <input className="inp" type="password" value={kg.ppConfirm}
-                      onChange={e=>setKg(p=>({...p,ppConfirm:e.target.value}))}
-                      onKeyDown={e=>e.key==='Enter'&&onCheckPP()} placeholder="••••••••" />
-                    {kg.ppError&&<span className="ferr">{kg.ppError}</span>}
-                  </div>
-                  <button className="btn-p" onClick={onCheckPP}>Next →</button>
-                </div>
-              </div>
-            )}
-
-            {kg.step==='genesis' && (
-              <div className="card">
-                <div className="ch">GENESIS HASH</div>
-                <div className="cb">
-                  <p className="dim mb">Binds your NodeID to this network. 64 hex chars (32 bytes).</p>
-                  <div className="field">
-                    <label>Genesis Hash</label>
-                    <input className="inp mono" type="text" value={kg.genesisHash}
-                      onChange={e=>setKg(p=>({...p,genesisHash:e.target.value.toLowerCase().trim()}))}
-                      placeholder="a69bef803747742c..." maxLength={64} />
-                    <span className="fhint">{kg.genesisHash.length}/64</span>
-                  </div>
-                  {kg.error&&<div className="err-box mb">{kg.error}</div>}
-                  <button className="btn-p" onClick={onDerive} disabled={kg.genesisHash.length!==64}>
-                    Derive Keys →
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {kg.step==='deriving' && (
-              <div className="card">
-                <div className="cb cb-c">
-                  <div className="spinner" />
-                  <p className="accent">Deriving keys via Argon2id…</p>
-                  <p className="dim sm">Tier C: 16 MB · 100 iterations · ~1–5 minutes</p>
-                </div>
-              </div>
-            )}
-
-            {kg.step==='complete' && (
-              <div className="card">
-                <div className="ch"><span className="ok">✅ KEYGEN COMPLETE</span></div>
-                <div className="cb">
-                  <div className="field">
-                    <label>Encrypted Keystore (base64 · 121 bytes)</label>
-                    <div className="code-box">
-                      <code>{kg.keystoreB64}</code>
-                      <button className="btn-copy" onClick={()=>navigator.clipboard.writeText(kg.keystoreB64)}>Copy</button>
-                    </div>
-                  </div>
-                  <p className="dim sm mb">Compatible with <code>scalar-node run --keystore</code> on VPS.</p>
-                  <div className="btn-row">
-                    <button className="btn-p" onClick={()=>{
-                      setDp(p=>({...p,keystoreB64:kg.keystoreB64,passphrase:kg.passphrase,genesisHash:kg.genesisHash}))
-                      setScreen('deploy')
-                    }}>→ Deploy This Node</button>
-                    <button className="btn-g" onClick={()=>setKg(KG0)}>New Keygen</button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {kg.error&&kg.step!=='genesis'&&<div className="err-box">{kg.error}</div>}
-          </div>
-        )}
-
-        {screen==='deploy' && (
-          <div className="page">
-            <div className="pg-title">
-              <h1>Deploy Node</h1>
-              <p>SSH into a VPS and deploy <code>scalar-node</code> automatically</p>
-            </div>
-            <div className="dp-grid">
-              <div className="dp-left">
-                <div className="card">
-                  <div className="ch">VPS CONNECTION</div>
-                  <div className="cb">
-                    <div className="field-row">
-                      <div className="field fg">
-                        <label>IP Address</label>
-                        <input className="inp mono" type="text" value={dp.host}
-                          onChange={e=>setDp(p=>({...p,host:e.target.value}))} placeholder="132.145.39.75" />
+                <div className="lp-body" ref={logRef}>
+                  {dp.logs.length === 0
+                    ? <div className="lp-empty"><span className="lp-empty-txt">Deployment output will appear here…</span></div>
+                    : dp.logs.map((l, i) => (
+                      <div key={i} className={`log-ln log-ln--${l.type}`}>
+                        <span className="log-ln__pfx">
+                          {l.type === 'cmd' ? '$' : l.type === 'ok' ? '✓' : l.type === 'err' ? '✗' : '→'}
+                        </span>
+                        <span className="log-ln__txt">{l.text}</span>
                       </div>
-                      <div className="field f120">
-                        <label>Username</label>
-                        <input className="inp mono" type="text" value={dp.username}
-                          onChange={e=>setDp(p=>({...p,username:e.target.value}))} />
-                      </div>
-                    </div>
-                    <div className="field">
-                      <label>SSH Key Path</label>
-                      <input className="inp mono" type="text" value={dp.keyPath}
-                        onChange={e=>setDp(p=>({...p,keyPath:e.target.value}))}
-                        placeholder="C:\Users\HOPEX\.ssh\scalar-node-3.key.key" />
-                    </div>
-                    <button className="btn-s btn-sm" onClick={onTestSSH} disabled={dp.status==='connecting'}>
-                      {dp.status==='connecting'?'Testing…':'Test Connection'}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="card">
-                  <div className="ch">KEYSTORE & CREDENTIALS</div>
-                  <div className="cb">
-                    <div className="field">
-                      <label>Encrypted Keystore (base64)</label>
-                      <textarea className="inp mono ta" value={dp.keystoreB64} rows={3}
-                        onChange={e=>setDp(p=>({...p,keystoreB64:e.target.value}))}
-                        placeholder="Paste from Keygen tab…" />
-                    </div>
-                    <div className="field">
-                      <label>Passphrase</label>
-                      <input className="inp" type="password" value={dp.passphrase}
-                        onChange={e=>setDp(p=>({...p,passphrase:e.target.value}))} placeholder="••••••••" />
-                    </div>
-                    <div className="field">
-                      <label>Genesis Hash</label>
-                      <input className="inp mono" type="text" value={dp.genesisHash} maxLength={64}
-                        onChange={e=>setDp(p=>({...p,genesisHash:e.target.value}))}
-                        placeholder="a69bef803747742c…" />
-                    </div>
-                    <div className="field">
-                      <label>Bootstrap Peers (one per line)</label>
-                      <textarea className="inp mono ta" value={dp.dialPeers} rows={5}
-                        onChange={e=>setDp(p=>({...p,dialPeers:e.target.value}))} />
-                    </div>
-                  </div>
-                </div>
-
-                <button className="btn-p btn-deploy" onClick={onDeploy}
-                  disabled={dp.status==='deploying'||!dp.host||!dp.keystoreB64||!dp.passphrase}>
-                  {dp.status==='deploying'?'⟳  Deploying…':'▶  Deploy Node'}
-                </button>
-              </div>
-
-              <div className="dp-right">
-                <div className="card card-term">
-                  <div className="ch">OUTPUT</div>
-                  <div className="term">
-                    {dp.output
-                      ? <pre className={`tt${dp.status==='error'?' tt-err':dp.status==='done'?' tt-ok':''}`}>{dp.output}</pre>
-                      : <p className="term-ph">Deployment output will appear here…</p>
-                    }
-                  </div>
-                </div>
-
-                <div className="card">
-                  <div className="ch">ORACLE VPS — QUICK SELECT</div>
-                  <div className="cb">
-                    {NODES.map(n=>(
-                      <div key={n.name} className="nrow" onClick={()=>
-                        setDp(p=>({...p, host:n.ip, keyPath:`C:\\Users\\HOPEX\\.ssh\\${n.key}`}))
-                      }>
-                        <span className="nname">{n.name}</span>
-                        <span className="nip">{n.ip}</span>
-                        <span className="nsel">Select →</span>
-                      </div>
-                    ))}
-                  </div>
+                    ))
+                  }
                 </div>
               </div>
             </div>
           </div>
         )}
-      </main>
+
+      </div></main>
     </div>
   )
 }
