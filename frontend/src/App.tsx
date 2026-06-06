@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import './App.css'
+import logoMark from './assets/Logo4.png'
 
 // ── Types ────────────────────────────────────────────────────────
 type Tab    = 'keygen' | 'deploy'
@@ -48,16 +49,7 @@ const KG_STEPS: { key: KgStep; label: string }[] = [
 ]
 const KG_ORDER: KgStep[] = KG_STEPS.map(s => s.key)
 
-// ── Icons (inline SVG) ────────────────────────────────────────────
-const LogoMark = () => (
-  <svg width="24" height="24" viewBox="0 0 24 24" className="logo-sym">
-    <rect x="1"   y="3" width="3" height="18" rx=".5" fill="currentColor"/>
-    <rect x="5"   y="3" width="3" height="18" rx=".5" fill="currentColor"/>
-    <rect x="9.5" y="7" width="5" height="10" rx=".5" fill="currentColor"/>
-    <rect x="16"  y="3" width="3" height="18" rx=".5" fill="currentColor"/>
-    <rect x="20"  y="3" width="3" height="18" rx=".5" fill="currentColor"/>
-  </svg>
-)
+// ── Icons (inline SVG) ──────────────────────────────────────────────
 const IKey = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="7.5" cy="15.5" r="5.5"/>
@@ -371,7 +363,7 @@ export default function App() {
   return (
     <div className="app-root">
       <header className="hdr" data-tauri-drag-region>
-        <div className="hdr__logo"><LogoMark /><span className="logo-txt">SCALAR NETWORK</span></div>
+        <div className="hdr__logo"><img src={logoMark} alt="" style={{height:28,width:"auto",mixBlendMode:"multiply"}} /><span className="logo-txt">SCALAR NETWORK</span></div>
         <nav className="hdr__nav">
           <button className={`ntab${tab === 'keygen' ? ' on' : ''}`} onClick={() => setTab('keygen')}><IKey />Keygen</button>
           <button className={`ntab${tab === 'deploy' ? ' on' : ''}`} onClick={() => setTab('deploy')}><ISrv />Deploy</button>
