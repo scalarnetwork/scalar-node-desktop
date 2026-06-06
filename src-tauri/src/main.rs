@@ -20,6 +20,7 @@ async fn encrypt_keystore_cmd(
     mnemonic: Vec<String>,
     genesis_hash: String,
     passphrase: String,
+    use_tier_c: Option<bool>,
 ) -> Result<String, String> {
     if !keygen::validate_mnemonic(&mnemonic) {
         return Err("Invalid mnemonic".to_string());
@@ -30,7 +31,8 @@ async fn encrypt_keystore_cmd(
         .try_into()
         .map_err(|_| "Genesis hash must be 32 bytes".to_string())?;
 
-    let node_id_full = keygen::derive_node_id_full(&mnemonic, &genesis_hash_bytes, &keygen::TIER_A)?;
+    let tier = if use_tier_c.unwrap_or(false) { &keygen::TIER_C } else { &keygen::TIER_A };
+    let node_id_full = keygen::derive_node_id_full(&mnemonic, &genesis_hash_bytes, tier)?;
     let node_key = keygen::derive_node_key(&mnemonic, &genesis_hash_bytes)?;
 
     let keystore = keygen::encrypt_keystore(&node_id_full, &node_key, &passphrase)?;

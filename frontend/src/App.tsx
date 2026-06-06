@@ -4,7 +4,10 @@ import './App.css'
 import logoMark from './assets/Logo4.png'
 
 // ── Types ────────────────────────────────────────────────────────
-type Tab    = 'keygen' | 'deploy'
+type Tab       = 'keygen' | 'deploy'
+type AppFlow   = 'welcome' | 'preKeygen' | 'main'
+type RamCheckSt = 'idle' | 'checking' | 'ok_a' | 'ok_c' | 'err'
+type SelTier   = 'A' | 'C'
 type KgStep = 'idle' | 'mnemonic' | 'confirm_word' | 'passphrase' | 'genesis' | 'deriving' | 'complete'
 type ConnSt = 'idle' | 'testing' | 'ok' | 'err'
 type DeplSt = 'idle' | 'deploying' | 'done' | 'error'
@@ -112,6 +115,10 @@ export default function App() {
   const [tab,       setTab]       = useState<Tab>('keygen')
   const [showPass,  setShowPass]  = useState(false)
   const [showPassC, setShowPassC] = useState(false)
+  const [appFlow,    setAppFlow]   = useState<AppFlow>('welcome')
+  const [selTier,    setSelTier]   = useState<SelTier>('A')
+  const [ramChk,     setRamChk]    = useState<RamCheckSt>('idle')
+  const [ramRes,     setRamRes]    = useState<RamInfo | null>(null)
   const [copied,    setCopied]    = useState<Record<string, boolean>>({})
   const [kg, setKg] = useState<KgState>({
     step: 'idle', mnemonic: [], revealed: false,
@@ -152,6 +159,20 @@ export default function App() {
   }, [dp.logs])
 
   // ── Helpers ───────────────────────────────────────────────────
+  const onCheckRam = async () => {
+    setRamChk('checking')
+    await new Promise(r => setTimeout(r, 1500 + Math.random() * 1000))
+    try {
+      const r = await invoke<RamInfo>('get_system_ram')
+      setRamRes(r)
+      const gb = r.available_mb / 1024
+      if (gb >= 4) { setSelTier('A'); setRamChk('ok_a') }
+      else         { setRamChk('err') }
+    } catch (_) { setRamChk('err') }
+  }
+
+  const onProceedTierC = () => { setSelTier('C'); setRamChk('ok_c') }
+
   const fmtTime = (sec: number): string => {
     const h  = Math.floor(sec / 3600)
     const m  = Math.floor((sec % 3600) / 60)
@@ -198,6 +219,7 @@ export default function App() {
     try {
       const keystore: string = await invoke('encrypt_keystore_cmd', {
         mnemonic: kg.mnemonic, passphrase: kg.pass, genesisHash: kg.genesis,
+        useTierC: selTier === 'C',
       })
       setKg(p => ({ ...p, step: 'complete', keystore }))
       setDp(p => ({ ...p, keystore, genesis: kg.genesis, pass: kg.pass }))
@@ -230,6 +252,204 @@ export default function App() {
 
   // ── Step indicator ────────────────────────────────────────────
   const curIdx = KG_ORDER.indexOf(kg.step)
+
+  const renderWelcome = () => (
+    <div className="ob-page">
+      <div className="ob-inner">
+        <div className="ob-hero">
+          <h1 className="ob-title">Jalankan Scalar Node</h1>
+          <p className="ob-sub">
+            Node adalah perangkat yang ikut menjalankan jaringan Scalar.
+            Setiap node punya identitas unik yang tidak bisa dipalsukan.
+          </p>
+        </div>
+
+        <div className="ob-layout">
+          {/* Kiri: info node + tier */}
+          <div>
+            <p className="ob-sec-lbl">Apa itu Node?</p>
+            <p className="ob-body">
+              Node menjaga jaringan tetap berjalan dengan memvalidasi transaksi
+              setiap 120 detik. Semakin lama node berjalan, semakin besar
+              reputasi dan reward yang diterima.
+            </p>
+
+            <p className="ob-sec-lbl">Pilihan Tier</p>
+            <table className="tier-tbl">
+              <thead>
+                <tr>
+                  <th></th>
+                  <th><span className="tier-badge tier-badge--a">Tier A</span></th>
+                  <th><span className="tier-badge tier-badge--c">Tier C</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>Perangkat</td><td>Desktop / Server</td><td>Ponsel</td></tr>
+                <tr><td>RAM</td><td>4 GB</td><td>16 MB</td></tr>
+                <tr><td>Waktu setup</td><td>~60–90 menit</td><td>~5 menit</td></tr>
+                <tr><td>Akses jaringan</td><td>Penuh</td><td>Terbatas</td></tr>
+                <tr><td>Reward</td><td>Maksimal</td><td>Lebih kecil</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Kanan: cek RAM */}
+          <div className="card" style={{ alignSelf: 'start' }}>
+            <p className="ob-sec-lbl">Cek Spesifikasi Perangkat</p>
+            <div className="ram-section">
+              <p className="ram-note">
+                Tutup browser, video, atau aplikasi berat lainnya
+                sebelum klik tombol di bawah agar hasil lebih akurat.
+              </p>
+
+              {ramChk === 'idle' && (
+                <button className="btn btn-s" onClick={onCheckRam}>
+                  Cek RAM Perangkat
+                </button>
+              )}
+
+              {ramChk === 'checking' && (
+                <button className="btn btn-s" disabled>
+                  <span className="btn-spinner btn-spinner--dark" />
+                  Memeriksa…
+                </button>
+              )}
+
+              {(ramChk === 'ok_a' || ramChk === 'ok_c' || ramChk === 'err') && ramRes && (
+                <>
+                  <div className={`ram-result ram-result--${ramChk === 'ok_a' ? 'ok' : ramChk === 'ok_c' ? 'warn' : 'err'}`}>
+                    <span>
+                      {ramChk === 'ok_a' ? '✅' : ramChk === 'ok_c' ? '⚠️' : '❌'}
+                    </span>
+                    <span>
+                      RAM tersedia
+                      <span className="ram-val">{(ramRes.available_mb / 1024).toFixed(1)} GB</span>
+                      {ramChk === 'ok_a'  && ' — cukup untuk Tier A'}
+                      {ramChk === 'ok_c'  && ' — lanjut dengan Tier C'}
+                      {ramChk === 'err'   && ' — kurang untuk Tier A'}
+                    </span>
+                  </div>
+
+                  {ramChk === 'err' && (
+                    <>
+                      <button className="btn btn-s btn-sm" onClick={onCheckRam}
+                        style={{ alignSelf: 'flex-start' }}>
+                        Cek Ulang
+                      </button>
+                      <div className="tier-c-link">
+                        Atau{' '}
+                        <button onClick={onProceedTierC}>
+                          lanjut dengan Tier C
+                        </button>
+                        {' '}(akses jaringan terbatas)
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+
+            {(ramChk === 'ok_a' || ramChk === 'ok_c') && (
+              <div style={{ marginTop: 'var(--s4)' }}>
+                <button className="btn btn-p btn-full"
+                  onClick={() => setAppFlow('preKeygen')}>
+                  Lanjut →
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+
+
+  const renderPreKeygen = () => (
+    <div className="ob-page">
+      <div className="ob-inner">
+        <div className="ob-hero">
+          <h1 className="ob-title">Sebelum Memulai</h1>
+          <p className="ob-sub">
+            Proses ini menghasilkan identitas node kamu.
+            Baca informasi berikut sebelum melanjutkan.
+          </p>
+        </div>
+
+        <div className="ob-layout">
+          {/* Kiri: apa yang dihasilkan */}
+          <div>
+            <p className="ob-sec-lbl">Yang Akan Dihasilkan</p>
+            <div className="ob-what">
+              <div className="ob-what-item">
+                <span className="ob-what-item__ico">🪪</span>
+                <div>
+                  <p className="ob-what-item__ttl">Node ID</p>
+                  <p className="ob-what-item__dsc">
+                    Identitas unik node kamu di jaringan Scalar.
+                    Dibuat dari 12 kata kunci + genesis hash jaringan.
+                  </p>
+                </div>
+              </div>
+              <div className="ob-what-item">
+                <span className="ob-what-item__ico">🔐</span>
+                <div>
+                  <p className="ob-what-item__ttl">Keystore</p>
+                  <p className="ob-what-item__dsc">
+                    File terenkripsi yang menyimpan Node ID kamu.
+                    Dikirim ke server (VPS) untuk menjalankan node.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Kanan: apa yang dibutuhkan */}
+          <div className="card" style={{ alignSelf: 'start' }}>
+            <p className="ob-sec-lbl">Yang Kamu Butuhkan</p>
+            <div className="ob-needs">
+              {[
+                ['📝', 'Kertas dan pena — untuk mencatat 12 kata kunci'],
+                ['🔑', 'Passphrase — kata sandi untuk mengunci Keystore'],
+                ['#️⃣',  'Genesis Hash — disediakan oleh tim Scalar'],
+                ['💾', selTier === 'A' ? 'RAM bebas minimal 4 GB' : 'RAM bebas minimal 16 MB'],
+                ['⏱', selTier === 'A' ? 'Waktu ~60–90 menit (laptop tetap menyala)' : 'Waktu ~5 menit'],
+                ['🔌', 'Laptop terhubung ke charger'],
+              ].map(([ico, txt], i) => (
+                <div key={i} className="ob-needs-item">
+                  <span style={{ fontSize: 16 }}>{ico}</span>
+                  <span>{txt}</span>
+                </div>
+              ))}
+            </div>
+            {selTier === 'C' && (
+              <div className="warn-box mt2" style={{ fontSize: 'var(--xs)' }}>
+                ⚠ Tier C: Node ID berbeda dengan Tier A.
+                Akses jaringan terbatas dan reward lebih kecil.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="ob-footer">
+          <button className="btn btn-g" onClick={() => setAppFlow('welcome')}>
+            ← Kembali
+          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s4)' }}>
+            <span className="ob-footer-note">
+              Pastikan kamu siap sebelum melanjutkan.
+              Proses tidak bisa dihentikan di tengah jalan.
+            </span>
+            <button className="btn btn-p"
+              onClick={() => setAppFlow('main')}
+              style={{ whiteSpace: 'nowrap' }}>
+              Mulai Generate →
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+
   const renderSteps = () => (
     <div className="step-ind">
       {KG_STEPS.map((s, i) => {
@@ -378,7 +598,9 @@ export default function App() {
       <div className="card kg-card drv-step">
         <div className="drv-bars">{[1, 2, 3, 4, 5].map(n => <div key={n} className="drv-bar" />)}</div>
         <p className="drv-lbl">Deriving keys via Argon2id…</p>
-        <p className="drv-sub">Tier A · 4 GB · 3,600 iter · p=1</p>
+        <p className="drv-sub">
+          {selTier === 'A' ? 'Tier A · 4 GB · 3.600 iter · ~60–90 menit' : 'Tier C · 16 MB · 100 iter · ~5 menit'}
+        </p>
         <div className="prg-track">
           <div className="prg-fill" style={{
             width: `${Math.min(elapsed / TIER_A_SECS * 100, 99)}%`,
@@ -423,6 +645,9 @@ export default function App() {
   }}
 
   // ── Render ────────────────────────────────────────────────────
+  if (appFlow === 'welcome')  return renderWelcome()
+  if (appFlow === 'preKeygen') return renderPreKeygen()
+
   return (
     <div className="app-root">
       <header className="hdr" data-tauri-drag-region>
