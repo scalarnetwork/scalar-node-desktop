@@ -330,7 +330,7 @@ export default function App() {
       <div className="card kg-card drv-step">
         <div className="drv-bars">{[1, 2, 3, 4, 5].map(n => <div key={n} className="drv-bar" />)}</div>
         <p className="drv-lbl">Deriving keys via Argon2id…</p>
-        <p className="drv-sub">Tier C: 16 MB · 100 iterations · ~1–5 minutes</p>
+        <p className="drv-sub">Tier A: 4 GB · 3,600 iterations · ~60–90 minutes</p>
         <div className="prg-track"><div className="prg-fill" /></div>
       </div>
     )
