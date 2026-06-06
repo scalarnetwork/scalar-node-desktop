@@ -23,6 +23,7 @@ interface DpState {
   deplSt: DeplSt; logs: LogLine[]
 }
 interface LogLine { type: 'cmd' | 'ok' | 'err' | 'inf'; text: string }
+interface RamInfo { total_mb: number; available_mb: number }
 
 // ── Constants ────────────────────────────────────────────────────
 const PEERS = [
@@ -48,6 +49,7 @@ const KG_STEPS: { key: KgStep; label: string }[] = [
   { key: 'complete',     label: 'Complete'   },
 ]
 const KG_ORDER: KgStep[] = KG_STEPS.map(s => s.key)
+const TIER_A_SECS = 5400 // 90 min conservative estimate
 
 // ── Icons (inline SVG) ──────────────────────────────────────────────
 const IKey = () => (
@@ -122,6 +124,29 @@ export default function App() {
     connSt: 'idle', connMsg: '', deplSt: 'idle', logs: [],
   })
   const logRef = useRef<HTMLDivElement>(null)
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [ram,     setRam]     = useState<RamInfo | null>(null)
+  const [elapsed, setElapsed] = useState(0)
+
+  useEffect(() => {
+    const fetchRam = async () => {
+      try { setRam(await invoke<RamInfo>('get_system_ram')) } catch (_) {}
+    }
+    fetchRam()
+    const id = setInterval(fetchRam, 5000)
+    return () => clearInterval(id)
+  }, [])
+
+  useEffect(() => {
+    if (kg.step === 'deriving') {
+      setElapsed(0)
+      timerRef.current = setInterval(() => setElapsed(e => e + 1), 1000)
+    } else {
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
+    }
+    return () => { if (timerRef.current) clearInterval(timerRef.current) }
+  }, [kg.step])
+
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
   }, [dp.logs])
@@ -219,6 +244,12 @@ export default function App() {
           ⚠ Your mnemonic is the <strong>only recovery path</strong>. Write it down first.
         </div>
         {kg.err && <div className="err-box" style={{ maxWidth: 400 }}>{kg.err}</div>}
+        {(() => { const rs = ramStatus(ram); return rs ? (
+          <div style={{ maxWidth:400, padding:'8px 12px', borderRadius:'var(--r-md)',
+            border:'1px solid', fontSize:'var(--xs)', color:rs.color, background:rs.bg }}>
+            {rs.icon} RAM: {rs.label}
+          </div>
+        ) : null })()} 
         <button className="btn btn-p" style={{ minWidth: 240 }} onClick={onGenerate}>Generate Mnemonic</button>
       </div>
     )
@@ -330,8 +361,23 @@ export default function App() {
       <div className="card kg-card drv-step">
         <div className="drv-bars">{[1, 2, 3, 4, 5].map(n => <div key={n} className="drv-bar" />)}</div>
         <p className="drv-lbl">Deriving keys via Argon2id…</p>
-        <p className="drv-sub">Tier A: 4 GB · 3,600 iterations · ~60–90 minutes</p>
-        <div className="prg-track"><div className="prg-fill" /></div>
+        <p className="drv-sub">Tier A · 4 GB · 3,600 iter · p=1</p>
+        <div className="prg-track">
+          <div className="prg-fill" style={{
+            width: `${Math.min(elapsed / TIER_A_SECS * 100, 99)}%`,
+            animation: elapsed > 5 ? 'none' : undefined
+          }} />
+        </div>
+        <div style={{ display:'flex', gap:'var(--s8)', fontSize:'var(--sm)', color:'var(--t3)' }}>
+          <span>Elapsed: <strong style={{ color:'var(--t2)', fontFamily:'var(--mono)' }}>{fmtTime(elapsed)}</strong></span>
+          <span>Remaining: <strong style={{ color:'var(--t2)', fontFamily:'var(--mono)' }}>{fmtTime(Math.max(TIER_A_SECS - elapsed, 0))}</strong></span>
+        </div>
+        {ram && <p style={{ fontSize:'var(--xs)', color:'var(--t3)', margin:0 }}>
+          RAM: <span style={{ fontFamily:'var(--mono)', color:'var(--t2)' }}>{(ram.available_mb/1024).toFixed(1)} GB tersedia</span>
+        </p>}
+        <div className="warn-box" style={{ maxWidth:400, fontSize:'var(--xs)' }}>
+          ⚠ Jangan tutup aplikasi ini. Argon2id sedang berjalan di background.
+        </div>
       </div>
     )
     case 'complete': return (
