@@ -152,6 +152,23 @@ export default function App() {
   }, [dp.logs])
 
   // ── Helpers ───────────────────────────────────────────────────
+  const fmtTime = (sec: number): string => {
+    const h  = Math.floor(sec / 3600)
+    const m  = Math.floor((sec % 3600) / 60)
+    const sc = sec % 60
+    const mm = String(m).padStart(2, '0')
+    const ss = String(sc).padStart(2, '0')
+    return h > 0 ? `${h}h ${mm}m ${ss}s` : `${mm}m ${ss}s`
+  }
+
+  const ramStatus = (r: RamInfo | null) => {
+    if (!r) return null
+    const gb = r.available_mb / 1024
+    if (gb >= 5) return { color:'var(--ok-t)', bg:'var(--ok-bg)', icon:'✅', label:`${gb.toFixed(1)} GB tersedia — cukup` }
+    if (gb >= 4) return { color:'var(--wn-t)', bg:'var(--wn-bg)', icon:'⚠️', label:`${gb.toFixed(1)} GB tersedia — tutup aplikasi lain` }
+    return        { color:'var(--er-t)', bg:'var(--er-bg)', icon:'❌', label:`${gb.toFixed(1)} GB — TIDAK CUKUP` }
+  }
+
   const copy = (id: string, text: string) => {
     navigator.clipboard.writeText(text)
     setCopied(p => ({ ...p, [id]: true }))
