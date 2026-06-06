@@ -363,7 +363,7 @@ export default function App() {
   return (
     <div className="app-root">
       <header className="hdr" data-tauri-drag-region>
-        <div className="hdr__logo"><img src={logoMark} alt="" style={{height:28,width:"auto",mixBlendMode:"multiply"}} /><span className="logo-txt">SCALAR NETWORK</span></div>
+        <div className="hdr__logo"><img src={logoMark} alt="Scalar Network" style={{height:28,width:"auto",mixBlendMode:"multiply"}} /></div>
         <nav className="hdr__nav">
           <button className={`ntab${tab === 'keygen' ? ' on' : ''}`} onClick={() => setTab('keygen')}><IKey />Keygen</button>
           <button className={`ntab${tab === 'deploy' ? ' on' : ''}`} onClick={() => setTab('deploy')}><ISrv />Deploy</button>
