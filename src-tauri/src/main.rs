@@ -15,7 +15,7 @@ fn generate_mnemonic_cmd() -> Vec<String> {
 
 /// Encrypt keystore from mnemonic, genesis hash, and passphrase.
 #[tauri::command]
-fn encrypt_keystore_cmd(
+async fn encrypt_keystore_cmd(
     mnemonic: Vec<String>,
     genesis_hash: String,
     passphrase: String,
@@ -39,14 +39,16 @@ fn encrypt_keystore_cmd(
 
 /// Test SSH connection to a VPS.
 #[tauri::command]
-fn test_ssh_connection(host: String, username: String, key_path: String) -> Result<bool, String> {
-    let config = SshConfig::new(&host, &username, &key_path);
-    Ok(config.test_connection())
+async fn test_ssh_connection(host: String, username: String, key_path: String) -> Result<bool, String> {
+    tokio::task::spawn_blocking(move || {
+        let config = SshConfig::new(&host, &username, &key_path);
+        Ok::<bool, String>(config.test_connection())
+    }).await.map_err(|e| e.to_string())?
 }
 
 /// Deploy a node to a VPS.
 #[tauri::command]
-fn deploy_node(
+async fn deploy_node(
     host: String,
     username: String,
     key_path: String,
@@ -71,6 +73,7 @@ fn deploy_node(
     config.execute(cmd_setup)
         .map_err(|e| format!("Failed to set up keystore on VPS: {}", e))?;
 
+    let exec_start_path = format!("/home/{}/scalar-core/target/release/scalar-node", username);
     let deploy_script = format!(
         r#"#!/bin/bash
 set -e
@@ -129,7 +132,7 @@ sudo systemctl start scalar-node
 echo "✅ Node deployed successfully!"
 "#,
         username = username,
-        exec_start = "/home/{username}/scalar-core/target/release/scalar-node",
+        exec_start = exec_start_path,
         dial_args = dial_peers.iter().map(|p| format!("--dial={}", p)).collect::<Vec<_>>().join(" ")
     );
 
