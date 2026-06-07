@@ -1,12 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import './App.css'
-import logoMark from './assets/Logo4.png'
 
 // ── Types ────────────────────────────────────────────────────────
-type Tab       = 'keygen' | 'deploy'
-type AppFlow   = 'welcome' | 'preKeygen' | 'main'
-type RamCheckSt = 'idle' | 'checking' | 'ok_a' | 'ok_c' | 'err'
 type SelTier   = 'A' | 'C'
 type KgStep = 'idle' | 'mnemonic' | 'confirm_word' | 'passphrase' | 'genesis' | 'deriving' | 'complete'
 type ConnSt = 'idle' | 'testing' | 'ok' | 'err'
@@ -61,13 +57,6 @@ const IKey = () => (
     <path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/>
   </svg>
 )
-const ISrv = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect width="20" height="8" x="2" y="2" rx="2"/>
-    <rect width="20" height="8" x="2" y="14" rx="2"/>
-    <line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/>
-  </svg>
-)
 const IEye = ({ off }: { off?: boolean }) => off ? (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/>
@@ -98,11 +87,6 @@ const IAlert = () => (
     <line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/>
   </svg>
 )
-const IFolder = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-  </svg>
-)
 const IChev = ({ open }: { open: boolean }) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
     style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>
@@ -112,7 +96,6 @@ const IChev = ({ open }: { open: boolean }) => (
 
 // ── App ──────────────────────────────────────────────────────────
 export default function App() {
-  const [tab,       setTab]       = useState<Tab>('keygen')
   const [showPass,  setShowPass]  = useState(false)
   const [showPassC,  setShowPassC]  = useState(false)
   const [appView,    setAppView]    = useState<AppView>('method-select')
@@ -124,10 +107,7 @@ export default function App() {
   const [showSrvFrm, setShowSrvFrm] = useState(false)
   const [showDialog, setShowDialog] = useState(false)
   const [srvForm,    setSrvForm]    = useState({ label:'', host:'', username:'ubuntu', keyPath:'' })
-  const [appFlow,    setAppFlow]   = useState<AppFlow>('welcome')
   const [selTier,    setSelTier]   = useState<SelTier>('A')
-  const [ramChk,     setRamChk]    = useState<RamCheckSt>('idle')
-  const [ramRes,     setRamRes]    = useState<RamInfo | null>(null)
   const [copied,    setCopied]    = useState<Record<string, boolean>>({})
   const [kg, setKg] = useState<KgState>({
     step: 'idle', mnemonic: [], revealed: false,
@@ -246,20 +226,6 @@ export default function App() {
       finally { setAppReady(true) }
     })()
   }, [])
-
-  const onCheckRam = async () => {
-    setRamChk('checking')
-    await new Promise(r => setTimeout(r, 1500 + Math.random() * 1000))
-    try {
-      const r = await invoke<RamInfo>('get_system_ram')
-      setRamRes(r)
-      const gb = r.available_mb / 1024
-      if (gb >= 4) { setSelTier('A'); setRamChk('ok_a') }
-      else         { setRamChk('err') }
-    } catch (_) { setRamChk('err') }
-  }
-
-  const onProceedTierC = () => { setSelTier('C'); setRamChk('ok_c') }
 
   const fmtTime = (sec: number): string => {
     const h  = Math.floor(sec / 3600)
@@ -885,7 +851,7 @@ export default function App() {
             ...p, step: 'idle', mnemonic: [], keystore: '',
             genesis: '', pass: '', passConfirm: '', err: '',
           }))}>Start Over</button>
-          <button className="btn btn-p" onClick={() => setTab('deploy')}>Go to Deploy →</button>
+          <button className="btn btn-p" onClick={() => setAppView('deploy')}>Go to Deploy →</button>
         </div>
       </div>
     )
