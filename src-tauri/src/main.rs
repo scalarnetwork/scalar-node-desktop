@@ -219,6 +219,17 @@ fn load_servers(app: tauri::AppHandle) -> Result<String, String> {
 }
 
 
+#[tauri::command]
+async fn pick_ssh_key() -> Result<Option<String>, String> {
+    let result = tokio::task::spawn_blocking(|| {
+        rfd::FileDialog::new()
+            .set_title("Pilih SSH Private Key")
+            .pick_file()
+    }).await.map_err(|e| e.to_string())?;
+    Ok(result.map(|p| p.to_string_lossy().to_string()))
+}
+
+
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -230,9 +241,9 @@ fn main() {
             save_setting,
             load_setting,
             save_servers,
-            load_servers
+            load_servers,
+            pick_ssh_key
         ])
-        .plugin(tauri_plugin_dialog::init())
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

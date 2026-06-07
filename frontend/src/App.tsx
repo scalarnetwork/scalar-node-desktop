@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import './App.css'
 
 // ── Types ────────────────────────────────────────────────────────
@@ -174,11 +173,8 @@ export default function App() {
 
   const pickKeyFile = async () => {
     try {
-      const selected = await openDialog({
-        multiple: false,
-        title: 'Pilih SSH Private Key',
-      })
-      if (selected) setSrvForm(p => ({ ...p, keyPath: selected as string }))
+      const selected = await invoke<string | null>('pick_ssh_key')
+      if (selected) setSrvForm(p => ({ ...p, keyPath: selected }))
     } catch (_) {}
   }
 
