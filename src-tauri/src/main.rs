@@ -2,6 +2,9 @@
 
 mod daemon;
 use sysinfo::System;
+use std::fs;
+use std::path::PathBuf;
+use tauri::Manager;
 mod gui;
 
 use daemon::keygen;
@@ -166,6 +169,56 @@ fn get_system_ram() -> serde_json::Value {
 }
 
 
+// ── App data storage helpers ──────────────────────────────────────
+fn app_data_path(app: &tauri::AppHandle, filename: &str) -> Result<PathBuf, String> {
+    let dir = app.path().app_data_dir()
+        .map_err(|e| format!("app_data_dir error: {}", e))?;
+    fs::create_dir_all(&dir)
+        .map_err(|e| format!("create_dir error: {}", e))?;
+    Ok(dir.join(filename))
+}
+
+#[tauri::command]
+fn save_setting(app: tauri::AppHandle, key: String, value: String) -> Result<(), String> {
+    let path = app_data_path(&app, "settings.json")?;
+    let mut settings: serde_json::Value = if path.exists() {
+        let content = fs::read_to_string(&path)
+            .map_err(|e| format!("read error: {}", e))?;
+        serde_json::from_str(&content).unwrap_or(serde_json::json!({}))
+    } else {
+        serde_json::json!({})
+    };
+    settings[key] = serde_json::Value::String(value);
+    let out = serde_json::to_string_pretty(&settings)
+        .map_err(|e| format!("serialize error: {}", e))?;
+    fs::write(&path, out).map_err(|e| format!("write error: {}", e))
+}
+
+#[tauri::command]
+fn load_setting(app: tauri::AppHandle, key: String) -> Result<Option<String>, String> {
+    let path = app_data_path(&app, "settings.json")?;
+    if !path.exists() { return Ok(None); }
+    let content = fs::read_to_string(&path)
+        .map_err(|e| format!("read error: {}", e))?;
+    let settings: serde_json::Value = serde_json::from_str(&content)
+        .map_err(|e| format!("parse error: {}", e))?;
+    Ok(settings[&key].as_str().map(|s| s.to_string()))
+}
+
+#[tauri::command]
+fn save_servers(app: tauri::AppHandle, data: String) -> Result<(), String> {
+    let path = app_data_path(&app, "servers.json")?;
+    fs::write(&path, data).map_err(|e| format!("write error: {}", e))
+}
+
+#[tauri::command]
+fn load_servers(app: tauri::AppHandle) -> Result<String, String> {
+    let path = app_data_path(&app, "servers.json")?;
+    if !path.exists() { return Ok("[]".to_string()); }
+    fs::read_to_string(&path).map_err(|e| format!("read error: {}", e))
+}
+
+
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -173,7 +226,11 @@ fn main() {
             encrypt_keystore_cmd,
             test_ssh_connection,
             deploy_node,
-            get_system_ram
+            get_system_ram,
+            save_setting,
+            load_setting,
+            save_servers,
+            load_servers
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

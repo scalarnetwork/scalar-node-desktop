@@ -12,6 +12,14 @@ type KgStep = 'idle' | 'mnemonic' | 'confirm_word' | 'passphrase' | 'genesis' | 
 type ConnSt = 'idle' | 'testing' | 'ok' | 'err'
 type DeplSt = 'idle' | 'deploying' | 'done' | 'error'
 
+type AppView = 'method-select' | 'keygen' | 'deploy' | 'settings'
+type Method  = 'ssh' | 'local'
+
+interface Server {
+  id: string; label: string; host: string
+  username: string; keyPath: string
+}
+
 interface KgState {
   step: KgStep; mnemonic: string[]; revealed: boolean
   word4: string; word4Err: string
@@ -33,14 +41,6 @@ const PEERS = [
   '132.145.39.75:17777', '132.226.130.138:17777', '145.241.205.71:17777',
   '140.238.72.52:17777', '140.238.91.78:17777',
 ].join('\n')
-
-const NODES = [
-  { name: 'scalar-node-1', ip: '132.145.39.75',  key: 'scalar-node-1.key.key' },
-  { name: 'scalar-node-2', ip: '132.226.130.138', key: 'scalar-node-2.key.key' },
-  { name: 'scalar-node-3', ip: '145.241.205.71',  key: 'scalar-node-3.key.key' },
-  { name: 'scalar-node-4', ip: '140.238.72.52',   key: 'scalar-node-4.key.key' },
-  { name: 'scalar-node-5', ip: '140.238.91.78',   key: 'scalar-node-5.key.key' },
-]
 
 const KG_STEPS: { key: KgStep; label: string }[] = [
   { key: 'idle',         label: 'Generate'   },
@@ -114,7 +114,16 @@ const IChev = ({ open }: { open: boolean }) => (
 export default function App() {
   const [tab,       setTab]       = useState<Tab>('keygen')
   const [showPass,  setShowPass]  = useState(false)
-  const [showPassC, setShowPassC] = useState(false)
+  const [showPassC,  setShowPassC]  = useState(false)
+  const [appView,    setAppView]    = useState<AppView>('method-select')
+  const [method,     setMethod]     = useState<Method>('ssh')
+  const [appReady,   setAppReady]   = useState(false)
+  const [appVersion, setAppVersion] = useState('—')
+  const [servers,    setServers]    = useState<Server[]>([])
+  const [selServer,  setSelServer]  = useState<Server | null>(null)
+  const [showSrvFrm, setShowSrvFrm] = useState(false)
+  const [showDialog, setShowDialog] = useState(false)
+  const [srvForm,    setSrvForm]    = useState({ label:'', host:'', username:'ubuntu', keyPath:'' })
   const [appFlow,    setAppFlow]   = useState<AppFlow>('welcome')
   const [selTier,    setSelTier]   = useState<SelTier>('A')
   const [ramChk,     setRamChk]    = useState<RamCheckSt>('idle')
@@ -159,6 +168,85 @@ export default function App() {
   }, [dp.logs])
 
   // ── Helpers ───────────────────────────────────────────────────
+
+  // ── Storage helpers ───────────────────────────────────────────
+  const persistServers = async (list: Server[]) => {
+    setServers(list)
+    try { await invoke('save_servers', { data: JSON.stringify(list) }) } catch (_) {}
+  }
+
+  const addServer = async () => {
+    if (!srvForm.label.trim() || !srvForm.host.trim()) return
+    const srv: Server = { id: crypto.randomUUID(), ...srvForm }
+    const list = [...servers, srv]
+    await persistServers(list)
+    setSelServer(srv)
+    setDp(p => ({ ...p, host: srv.host, user: srv.username, keyPath: srv.keyPath, connSt:'idle', connMsg:'' }))
+    setSrvForm({ label:'', host:'', username:'ubuntu', keyPath:'' })
+    setShowSrvFrm(false)
+  }
+
+  const deleteServer = async (id: string) => {
+    const list = servers.filter(sv => sv.id !== id)
+    await persistServers(list)
+    if (selServer?.id === id) {
+      const next = list[0] || null
+      setSelServer(next)
+      if (next) setDp(p => ({ ...p, host:next.host, user:next.username, keyPath:next.keyPath, connSt:'idle', connMsg:'' }))
+      else setDp(p => ({ ...p, host:'', user:'ubuntu', keyPath:'', connSt:'idle', connMsg:'' }))
+    }
+  }
+
+  const selectServer = (srv: Server) => {
+    setSelServer(srv)
+    setDp(p => ({ ...p, host:srv.host, user:srv.username, keyPath:srv.keyPath, connSt:'idle', connMsg:'' }))
+  }
+
+  const onChooseMethod = async (m: Method) => {
+    setMethod(m)
+    try { await invoke('save_setting', { key:'deployment_method', value:m }) } catch (_) {}
+    setAppView('keygen')
+  }
+
+  const onSwitchMethod = async (m: Method) => {
+    if (m === 'local') { setShowDialog(true); return }
+    setMethod(m)
+    try { await invoke('save_setting', { key:'deployment_method', value:m }) } catch (_) {}
+  }
+
+
+  const onChangeTier = async (t: SelTier) => {
+    setSelTier(t)
+    try { await invoke('save_setting', { key:'tier', value:t }) } catch (_) {}
+  }
+
+  // ── Init: load saved settings ──────────────────────────────────
+  useEffect(() => {
+    (async () => {
+      try {
+        const saved = await invoke<string | null>('load_setting', { key:'deployment_method' })
+        if (saved === 'ssh' || saved === 'local') {
+          setMethod(saved as Method)
+          setAppView('keygen')
+        }
+        const savedTier = await invoke<string | null>('load_setting', { key:'tier' })
+        if (savedTier === 'A' || savedTier === 'C') setSelTier(savedTier as SelTier)
+        try {
+          const { getVersion } = await import('@tauri-apps/api/app')
+          setAppVersion(await getVersion())
+        } catch (_) {}
+        const rawSrvs = await invoke<string>('load_servers')
+        const srvList: Server[] = JSON.parse(rawSrvs)
+        setServers(srvList)
+        if (srvList.length > 0) {
+          setSelServer(srvList[0])
+          setDp(p => ({ ...p, host:srvList[0].host, user:srvList[0].username, keyPath:srvList[0].keyPath }))
+        }
+      } catch (_) {}
+      finally { setAppReady(true) }
+    })()
+  }, [])
+
   const onCheckRam = async () => {
     setRamChk('checking')
     await new Promise(r => setTimeout(r, 1500 + Math.random() * 1000))
@@ -254,202 +342,347 @@ export default function App() {
   // ── Step indicator ────────────────────────────────────────────
   const curIdx = KG_ORDER.indexOf(kg.step)
 
-  const renderWelcome = () => (
-    <div className="ob-page">
-      <div className="ob-inner">
-        <div className="ob-hero">
-          <h1 className="ob-title">Jalankan Scalar Node</h1>
-          <p className="ob-sub">
-            Node adalah perangkat yang ikut menjalankan jaringan Scalar.
-            Setiap node punya identitas unik yang tidak bisa dipalsukan.
-          </p>
-        </div>
 
-        <div className="ob-layout">
-          {/* Kiri: info node + tier */}
-          <div>
-            <p className="ob-sec-lbl">Apa itu Node?</p>
-            <p className="ob-body">
-              Node menjaga jaringan tetap berjalan dengan memvalidasi transaksi
-              setiap 120 detik. Semakin lama node berjalan, semakin besar
-              reputasi dan reward yang diterima.
-            </p>
+  // ── Screen 0: Method Selection ────────────────────────────────
 
-            <p className="ob-sec-lbl">Pilihan Tier</p>
-            <table className="tier-tbl">
-              <thead>
-                <tr>
-                  <th></th>
-                  <th><span className="tier-badge tier-badge--a">Tier A</span></th>
-                  <th><span className="tier-badge tier-badge--c">Tier C</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr><td>Perangkat</td><td>Desktop / Server</td><td>Ponsel</td></tr>
-                <tr><td>RAM</td><td>4 GB</td><td>16 MB</td></tr>
-                <tr><td>Waktu setup</td><td>~60–90 menit</td><td>~5 menit</td></tr>
-                <tr><td>Akses jaringan</td><td>Penuh</td><td>Terbatas</td></tr>
-                <tr><td>Reward</td><td>Maksimal</td><td>Lebih kecil</td></tr>
-              </tbody>
-            </table>
-          </div>
+  // ── Sidebar ───────────────────────────────────────────────────
+  const renderSidebar = () => (
+    <nav className="sidebar">
+      <div className="sidebar__logo" data-tauri-drag-region>
+        <svg width="24" height="24" viewBox="0 0 24 24" className="logo-sym">
+          <rect x="1"   y="3" width="3" height="18" rx=".5" fill="currentColor"/>
+          <rect x="5"   y="3" width="3" height="18" rx=".5" fill="currentColor"/>
+          <rect x="9.5" y="7" width="5" height="10" rx=".5" fill="currentColor"/>
+          <rect x="16"  y="3" width="3" height="18" rx=".5" fill="currentColor"/>
+          <rect x="20"  y="3" width="3" height="18" rx=".5" fill="currentColor"/>
+        </svg>
+        <span className="sidebar__logo-txt">SCALAR</span>
+      </div>
+      <hr className="sidebar__divider" />
+      <div className="sidebar__nav">
+        <button className={`nav-item${appView==='keygen'?' nav-item--active':''}`}
+          onClick={() => setAppView('keygen')}>Keygen</button>
+        <button className={`nav-item${appView==='deploy'?' nav-item--active':''}`}
+          onClick={() => setAppView('deploy')}>Deploy</button>
+      </div>
+      <div className="sidebar__spacer" />
+      <div className="sidebar__bottom">
+        <button className={`nav-item${appView==='settings'?' nav-item--active':''}`}
+          onClick={() => setAppView('settings')}>Settings</button>
+      </div>
+    </nav>
+  )
 
-          {/* Kanan: cek RAM */}
-          <div className="card" style={{ alignSelf: 'start' }}>
-            <p className="ob-sec-lbl">Cek Spesifikasi Perangkat</p>
-            <div className="ram-section">
-              <p className="ram-note">
-                Tutup browser, video, atau aplikasi berat lainnya
-                sebelum klik tombol di bawah agar hasil lebih akurat.
-              </p>
-
-              {ramChk === 'idle' && (
-                <button className="btn btn-s" onClick={onCheckRam}>
-                  Cek RAM Perangkat
-                </button>
-              )}
-
-              {ramChk === 'checking' && (
-                <button className="btn btn-s" disabled>
-                  <span className="btn-spinner btn-spinner--dark" />
-                  Memeriksa…
-                </button>
-              )}
-
-              {(ramChk === 'ok_a' || ramChk === 'ok_c' || ramChk === 'err') && ramRes && (
-                <>
-                  <div className={`ram-result ram-result--${ramChk === 'ok_a' ? 'ok' : ramChk === 'ok_c' ? 'warn' : 'err'}`}>
-                    <span>
-                      {ramChk === 'ok_a' ? '✅' : ramChk === 'ok_c' ? '⚠️' : '❌'}
-                    </span>
-                    <span>
-                      RAM tersedia
-                      <span className="ram-val">{(ramRes.available_mb / 1024).toFixed(1)} GB</span>
-                      {ramChk === 'ok_a'  && ' — cukup untuk Tier A'}
-                      {ramChk === 'ok_c'  && ' — lanjut dengan Tier C'}
-                      {ramChk === 'err'   && ' — kurang untuk Tier A'}
-                    </span>
-                  </div>
-
-                  {ramChk === 'err' && (
-                    <>
-                      <button className="btn btn-s btn-sm" onClick={onCheckRam}
-                        style={{ alignSelf: 'flex-start' }}>
-                        Cek Ulang
-                      </button>
-                      <div className="tier-c-link">
-                        Atau{' '}
-                        <button onClick={onProceedTierC}>
-                          lanjut dengan Tier C
-                        </button>
-                        {' '}(akses jaringan terbatas)
-                      </div>
-                    </>
-                  )}
-                </>
-              )}
-            </div>
-
-            {(ramChk === 'ok_a' || ramChk === 'ok_c') && (
-              <div style={{ marginTop: 'var(--s4)' }}>
-                <button className="btn btn-p btn-full"
-                  onClick={() => setAppFlow('preKeygen')}>
-                  Lanjut →
-                </button>
-              </div>
-            )}
-          </div>
+  // ── Confirmation dialog ───────────────────────────────────────
+  const renderDialog = () => (
+    <div className="dialog-backdrop" onClick={() => setShowDialog(false)}>
+      <div className="dialog" onClick={e => e.stopPropagation()}>
+        <p className="dialog__title">Beralih ke Local Mode?</p>
+        <p className="dialog__body">
+          Fitur ini belum tersedia dan tidak dapat digunakan saat ini.
+        </p>
+        <div className="dialog__footer">
+          <button className="btn btn-s" onClick={() => setShowDialog(false)}>Batal</button>
+          <button className="btn btn-p" onClick={() => setShowDialog(false)}>Mengerti</button>
         </div>
       </div>
     </div>
   )
 
+  // ── Deploy Section ───────────────────────────────────────────
+  const renderDeploySection = () => {
+    // State A — empty
+    if (servers.length === 0 && !showSrvFrm) return (
+      <div className="dp-empty">
+        <svg className="dp-empty__ico" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/>
+          <line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/>
+        </svg>
+        <p className="dp-empty__title">Belum ada server</p>
+        <p className="dp-empty__sub">
+          Tambahkan server SSH pertama kamu untuk mulai deploy node.
+        </p>
+        <button className="btn btn-p btn-sm" onClick={() => setShowSrvFrm(true)}>
+          + Tambah Server
+        </button>
+      </div>
+    )
 
-  const renderPreKeygen = () => (
-    <div className="ob-page">
-      <div className="ob-inner">
-        <div className="ob-hero">
-          <h1 className="ob-title">Sebelum Memulai</h1>
-          <p className="ob-sub">
-            Proses ini menghasilkan identitas node kamu.
-            Baca informasi berikut sebelum melanjutkan.
-          </p>
-        </div>
-
-        <div className="ob-layout">
-          {/* Kiri: apa yang dihasilkan */}
-          <div>
-            <p className="ob-sec-lbl">Yang Akan Dihasilkan</p>
-            <div className="ob-what">
-              <div className="ob-what-item">
-                <span className="ob-what-item__ico">🪪</span>
-                <div>
-                  <p className="ob-what-item__ttl">Node ID</p>
-                  <p className="ob-what-item__dsc">
-                    Identitas unik node kamu di jaringan Scalar.
-                    Dibuat dari 12 kata kunci + genesis hash jaringan.
-                  </p>
-                </div>
-              </div>
-              <div className="ob-what-item">
-                <span className="ob-what-item__ico">🔐</span>
-                <div>
-                  <p className="ob-what-item__ttl">Keystore</p>
-                  <p className="ob-what-item__dsc">
-                    File terenkripsi yang menyimpan Node ID kamu.
-                    Dikirim ke server (VPS) untuk menjalankan node.
-                  </p>
-                </div>
-              </div>
-            </div>
+    // State B — add server form
+    if (showSrvFrm) return (
+      <div>
+        <p className="page-title-lg">Tambah Server</p>
+        <div className="srv-form">
+          <div className="field">
+            <label className="fld-lbl">Label</label>
+            <input className="inp" type="text" value={srvForm.label} placeholder="contoh: Oracle Frankfurt"
+              onChange={e => setSrvForm(p => ({...p, label:e.target.value}))} autoFocus />
           </div>
-
-          {/* Kanan: apa yang dibutuhkan */}
-          <div className="card" style={{ alignSelf: 'start' }}>
-            <p className="ob-sec-lbl">Yang Kamu Butuhkan</p>
-            <div className="ob-needs">
-              {[
-                ['📝', 'Kertas dan pena — untuk mencatat 12 kata kunci'],
-                ['🔑', 'Passphrase — kata sandi untuk mengunci Keystore'],
-                ['#️⃣',  'Genesis Hash — disediakan oleh tim Scalar'],
-                ['💾', selTier === 'A' ? 'RAM bebas minimal 4 GB' : 'RAM bebas minimal 16 MB'],
-                ['⏱', selTier === 'A' ? 'Waktu ~60–90 menit (laptop tetap menyala)' : 'Waktu ~5 menit'],
-                ['🔌', 'Laptop terhubung ke charger'],
-              ].map(([ico, txt], i) => (
-                <div key={i} className="ob-needs-item">
-                  <span style={{ fontSize: 16 }}>{ico}</span>
-                  <span>{txt}</span>
-                </div>
-              ))}
-            </div>
-            {selTier === 'C' && (
-              <div className="warn-box mt2" style={{ fontSize: 'var(--xs)' }}>
-                ⚠ Tier C: Node ID berbeda dengan Tier A.
-                Akses jaringan terbatas dan reward lebih kecil.
-              </div>
-            )}
+          <div className="field">
+            <label className="fld-lbl">IP Address / Host</label>
+            <input className="inp inp-mono" type="text" value={srvForm.host} placeholder="132.145.39.75"
+              onChange={e => setSrvForm(p => ({...p, host:e.target.value}))} />
           </div>
-        </div>
-
-        <div className="ob-footer">
-          <button className="btn btn-g" onClick={() => setAppFlow('welcome')}>
-            ← Kembali
-          </button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s4)' }}>
-            <span className="ob-footer-note">
-              Pastikan kamu siap sebelum melanjutkan.
-              Proses tidak bisa dihentikan di tengah jalan.
-            </span>
+          <div className="field">
+            <label className="fld-lbl">Username</label>
+            <input className="inp" type="text" value={srvForm.username}
+              onChange={e => setSrvForm(p => ({...p, username:e.target.value}))} />
+          </div>
+          <div className="field">
+            <label className="fld-lbl">SSH Key Path</label>
+            <input className="inp inp-mono" type="text" value={srvForm.keyPath}
+              placeholder="C:\Users\HOPEX\.ssh\scalar-node.key"
+              onChange={e => setSrvForm(p => ({...p, keyPath:e.target.value}))} />
+          </div>
+          <div className="srv-form-footer">
+            <button className="btn btn-s" onClick={() => setShowSrvFrm(false)}>Batal</button>
             <button className="btn btn-p"
-              onClick={() => setAppFlow('main')}
-              style={{ whiteSpace: 'nowrap' }}>
-              Mulai Generate →
+              disabled={!srvForm.label.trim() || !srvForm.host.trim()}
+              onClick={addServer}>
+              Simpan Server
             </button>
           </div>
         </div>
       </div>
+    )
+
+    // State C — server list + deploy form
+    return (
+      <div className="dp-main">
+        {/* Kolom kiri */}
+        <div className="dp-left">
+
+          <div className="srv-section">
+            <div className="srv-sec-hdr">
+              <span className="srv-sec-lbl">Server</span>
+              <button className="btn btn-g btn-sm" onClick={() => setShowSrvFrm(true)}>+ Tambah</button>
+            </div>
+            <div className="srv-list">
+              {servers.map(sv => (
+                <div key={sv.id}
+                  className={`server-item${selServer?.id===sv.id?' server-item--active':''}`}
+                  onClick={() => selectServer(sv)}>
+                  <div className="srv-info">
+                    <span className="srv-label">{sv.label}</span>
+                    <span className="srv-ip">{sv.host}</span>
+                  </div>
+                  <button className="srv-del" type="button"
+                    onClick={e => { e.stopPropagation(); deleteServer(sv.id) }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3 6 5 6 21 6"/>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="dp-form-section">
+            <div className="field">
+              <label className="fld-lbl">Encrypted Keystore (base64)</label>
+              <textarea className="inp ta inp-mono" rows={3} value={dp.keystore}
+                placeholder="Paste keystore dari tab Keygen…"
+                onChange={e => setDp(p => ({...p, keystore:e.target.value}))} />
+            </div>
+            <div className="field">
+              <label className="fld-lbl">Passphrase</label>
+              <div className="inp-wrap">
+                <input className="inp" type={showPass?'text':'password'} value={dp.pass}
+                  placeholder="Keystore passphrase"
+                  onChange={e => setDp(p => ({...p, pass:e.target.value}))} />
+                <button className="inp-ico" type="button" onClick={() => setShowPass(v=>!v)}>
+                  <IEye off={showPass}/>
+                </button>
+              </div>
+            </div>
+            <div className="field">
+              <label className="fld-lbl">Genesis Hash</label>
+              <input className="inp inp-mono" type="text" value={dp.genesis}
+                placeholder="64-char hex"
+                onChange={e => setDp(p => ({...p, genesis:e.target.value}))} />
+            </div>
+            <div>
+              <div className="coll-hdr" onClick={() => setDp(p=>({...p,peersOpen:!p.peersOpen}))}>
+                <span>Bootstrap Peers ({dp.peers.split('\n').filter(Boolean).length})</span>
+                <IChev open={dp.peersOpen}/>
+              </div>
+              <div className={`coll-body${dp.peersOpen?' open':' closed'}`}>
+                <textarea className="inp ta inp-mono mt2" rows={5} value={dp.peers}
+                  onChange={e => setDp(p=>({...p,peers:e.target.value}))} />
+              </div>
+            </div>
+            <div className="c-row">
+              <button className="btn btn-s btn-sm"
+                disabled={!selServer||dp.connSt==='testing'} onClick={onTestConn}>
+                {dp.connSt==='testing'?<><span className="btn-spinner btn-spinner--dark"/>Menguji…</>:'Test Koneksi'}
+              </button>
+              {dp.connSt==='ok'  && <span className="c-st c-ok"><ICheck/>{dp.connMsg}</span>}
+              {dp.connSt==='err' && <span className="c-st c-err">{dp.connMsg}</span>}
+            </div>
+            <button className="btn btn-p btn-full"
+              disabled={!selServer||!dp.keystore||!dp.pass||dp.deplSt==='deploying'}
+              onClick={onDeploy}>
+              {dp.deplSt==='deploying'?<><span className="btn-spinner"/>Deploying…</>
+               :dp.deplSt==='done'  ?'✓  Deployed'
+               :dp.deplSt==='error' ?'Retry Deploy'
+               :'▶  Deploy Node'}
+            </button>
+          </div>
+        </div>
+
+        {/* Kolom kanan — log panel */}
+        <div className="dp-right">
+          <div className="log-panel" style={{height:'100%'}}>
+            <div className="lp-hdr">
+              <span className="lp-ttl">OUTPUT</span>
+              {dp.logs.length>0 && <span className="lp-cnt">{dp.logs.length} baris</span>}
+            </div>
+            <div className="lp-body" ref={logRef}>
+              {dp.logs.length===0
+                ?<div className="lp-empty"><span className="lp-empty-txt">Output deployment akan muncul di sini…</span></div>
+                :dp.logs.map((l,i)=>(
+                  <div key={i} className={`log-ln log-ln--${l.type}`}>
+                    <span className="log-ln__pfx">
+                      {l.type==='cmd'?'$':l.type==='ok'?'✓':l.type==='err'?'✗':'→'}
+                    </span>
+                    <span className="log-ln__txt">{l.text}</span>
+                  </div>
+                ))
+              }
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Settings Section ─────────────────────────────────────────
+  const renderSettingsSection = () => (
+    <div className="settings-page">
+      <p className="page-title-lg">Settings</p>
+
+      <div className="settings-section">
+        <p className="settings-sec-lbl">Metode Deployment</p>
+        <label className="radio-item">
+          <input type="radio" readOnly checked={method==='ssh'}
+            onChange={() => onSwitchMethod('ssh')} />
+          <div>
+            <p className="radio-item__lbl">SSH Remote Server</p>
+            <p className="radio-item__sub">Deploy node ke server via SSH</p>
+          </div>
+        </label>
+        <label className="radio-item radio-item--off">
+          <input type="radio" disabled checked={false} readOnly />
+          <div>
+            <p className="radio-item__lbl">
+              Local Mode
+              <span className="method-card__badge" style={{marginLeft:8}}>Segera Hadir</span>
+            </p>
+            <p className="radio-item__sub">Jalankan node langsung di komputer ini</p>
+          </div>
+        </label>
+        <p className="settings-info">Perubahan berlaku setelah restart aplikasi.</p>
+      </div>
+
+      <hr className="settings-divider" />
+
+      <div className="settings-section">
+        <p className="settings-sec-lbl">Tier Node</p>
+        <label className="radio-item" onClick={() => onChangeTier('A')}>
+          <input type="radio" readOnly checked={selTier==='A'} onChange={() => onChangeTier('A')} />
+          <div>
+            <p className="radio-item__lbl">Tier A — Full Node</p>
+            <p className="radio-item__sub">4 GB RAM · ~60–90 menit setup · Akses penuh jaringan</p>
+          </div>
+        </label>
+        <label className="radio-item" onClick={() => onChangeTier('C')}>
+          <input type="radio" readOnly checked={selTier==='C'} onChange={() => onChangeTier('C')} />
+          <div>
+            <p className="radio-item__lbl">Tier C — Terbatas</p>
+            <p className="radio-item__sub">16 MB RAM · ~5 menit setup · Akses terbatas</p>
+          </div>
+        </label>
+        <p className="settings-info">
+          {selTier==='A'
+            ? 'Node ID dibuat dengan parameter Tier A — mainnet-ready.'
+            : 'Tier C menghasilkan Node ID berbeda dari Tier A. Reward lebih kecil.'}
+        </p>
+      </div>
+
+      <hr className="settings-divider" />
+
+      <div className="settings-section">
+        <p className="settings-sec-lbl">Tentang</p>
+        <div className="about-row">
+          <span className="about-row__key">Versi Aplikasi</span>
+          <span className="about-row__val">{appVersion}</span>
+        </div>
+        <div className="about-row">
+          <span className="about-row__key">Scalar Network</span>
+          <a className="about-row__link"
+            href="https://scalar.network" target="_blank" rel="noreferrer">
+            scalar.network
+          </a>
+        </div>
+      </div>
     </div>
   )
+
+  const renderMethodSelect = () => (
+    <div className="ms-page">
+      <div className="ms-inner">
+
+        <div className="ms-logo">
+          <svg width="24" height="24" viewBox="0 0 24 24" className="logo-sym">
+            <rect x="1"   y="3" width="3" height="18" rx=".5" fill="currentColor"/>
+            <rect x="5"   y="3" width="3" height="18" rx=".5" fill="currentColor"/>
+            <rect x="9.5" y="7" width="5" height="10" rx=".5" fill="currentColor"/>
+            <rect x="16"  y="3" width="3" height="18" rx=".5" fill="currentColor"/>
+            <rect x="20"  y="3" width="3" height="18" rx=".5" fill="currentColor"/>
+          </svg>
+          <span className="sidebar__logo-txt">SCALAR NETWORK</span>
+        </div>
+
+        <div className="ms-heading">
+          <h1 className="ms-title">Pilih cara menjalankan node</h1>
+          <p className="ms-sub">
+            Pilih metode yang sesuai dengan setup kamu.
+            Kamu bisa mengubah ini kapan saja dari menu Settings.
+          </p>
+        </div>
+
+        <div className="ms-cards">
+          <div
+            className={`method-card${selTier === 'A' ? ' method-card--selected' : ''}`}
+            onClick={() => setSelTier('A' as any)}>
+            <p className="method-card__title">SSH Remote Server</p>
+            <p className="method-card__desc">
+              Generate key di perangkat ini, lalu deploy
+              node ke server atau VPS milikmu via SSH.
+            </p>
+          </div>
+          <div className="method-card method-card--disabled">
+            <span className="method-card__badge">Segera Hadir</span>
+            <p className="method-card__title">Local Mode</p>
+            <p className="method-card__desc">
+              Jalankan node langsung di komputer ini
+              tanpa memerlukan server eksternal.
+            </p>
+          </div>
+        </div>
+
+        <div className="ms-footer">
+          <button className="btn btn-p"
+            onClick={() => onChooseMethod('ssh')}>
+            Lanjut →
+          </button>
+        </div>
+
+      </div>
+    </div>
+  )
+
 
   const renderSteps = () => (
     <div className="step-ind">
@@ -480,6 +713,20 @@ export default function App() {
         <p className="kg-sub">Create a 12-word mnemonic (121-bit entropy). Store in cold storage before proceeding.</p>
         <div className="warn-box" style={{ maxWidth: 400, textAlign: 'left' }}>
           ⚠ Your mnemonic is the <strong>only recovery path</strong>. Write it down first.
+        </div>
+        <div className="info-panel" style={{ width:'100%', maxWidth:400, textAlign:'left' }}>
+          <div className="info-panel__item">
+            <span className="info-panel__term">Node ID</span>
+            <span className="info-panel__desc">Identitas unik node kamu di jaringan Scalar, dibuat dari 12 kata kunci + genesis hash.</span>
+          </div>
+          <div className="info-panel__item">
+            <span className="info-panel__term">Keystore</span>
+            <span className="info-panel__desc">File terenkripsi 121 bytes yang menyimpan Node ID. Dikirim ke server via SSH untuk menjalankan node.</span>
+          </div>
+          <div className="info-panel__item">
+            <span className="info-panel__term">Tier saat ini</span>
+            <span className="info-panel__desc">{selTier === 'A' ? 'Tier A — Full Node (4 GB RAM, ~60-90 menit)' : 'Tier C — Terbatas (16 MB RAM, ~5 menit)'}</span>
+          </div>
         </div>
         {kg.err && <div className="err-box" style={{ maxWidth: 400 }}>{kg.err}</div>}
         {(() => { const rs = ramStatus(ram); return rs ? (
@@ -646,158 +893,23 @@ export default function App() {
   }}
 
   // ── Render ────────────────────────────────────────────────────
-  if (appFlow === 'welcome')  return renderWelcome()
-  if (appFlow === 'preKeygen') return renderPreKeygen()
+  if (!appReady) return null
+  if (appView === 'method-select') return renderMethodSelect()
 
   return (
-    <div className="app-root">
-      <header className="hdr" data-tauri-drag-region>
-        <div className="hdr__logo"><img src={logoMark} alt="Scalar Network" style={{height:28,width:"auto",mixBlendMode:"multiply"}} /></div>
-        <nav className="hdr__nav">
-          <button className={`ntab${tab === 'keygen' ? ' on' : ''}`} onClick={() => setTab('keygen')}><IKey />Keygen</button>
-          <button className={`ntab${tab === 'deploy' ? ' on' : ''}`} onClick={() => setTab('deploy')}><ISrv />Deploy</button>
-        </nav>
-        <div className="hdr__meta"><span className="net-badge"><span className="net-badge__dot" />Testnet</span></div>
-      </header>
-
-      <main className="main"><div className="wrap">
-
-        {tab === 'keygen' && (
-          <div className="kg-wrap">{renderSteps()}{renderKg()}</div>
-        )}
-
-        {tab === 'deploy' && (
-          <div className="dp-layout">
-            <div className="dp-form">
-
-              <div className="card">
-                <div className="card-sec-hdr">CONNECTION</div>
-                <div className="fstk mb2">
-                  <div className="f-row">
-                    <div className="field">
-                      <label className="fld-lbl">VPS IP Address</label>
-                      <input className="inp inp-mono" type="text" value={dp.host} placeholder="132.145.39.75"
-                        onChange={e => setDp(p => ({ ...p, host: e.target.value, connSt: 'idle', connMsg: '' }))} />
-                    </div>
-                    <div className="field">
-                      <label className="fld-lbl">Username</label>
-                      <input className="inp" type="text" value={dp.user}
-                        onChange={e => setDp(p => ({ ...p, user: e.target.value }))} />
-                    </div>
-                  </div>
-                  <div className="field">
-                    <label className="fld-lbl">SSH Key Path</label>
-                    <div className="inp-wrap">
-                      <input className="inp inp-mono" type="text" value={dp.keyPath}
-                        placeholder="C:\Users\HOPEX\.ssh\scalar-node-1.key.key"
-                        onChange={e => setDp(p => ({ ...p, keyPath: e.target.value }))} />
-                      <span className="inp-ico" style={{ pointerEvents: 'none' }}><IFolder /></span>
-                    </div>
-                  </div>
-                </div>
-                <div className="c-row">
-                  <button className="btn btn-s btn-sm"
-                    disabled={!dp.host || dp.connSt === 'testing'} onClick={onTestConn}>
-                    {dp.connSt === 'testing'
-                      ? <><span className="btn-spinner btn-spinner--dark" />Testing…</>
-                      : 'Test Connection'}
-                  </button>
-                  {dp.connSt === 'ok'  && <span className="c-st c-ok"><ICheck />{dp.connMsg}</span>}
-                  {dp.connSt === 'err' && <span className="c-st c-err">{dp.connMsg}</span>}
-                </div>
-              </div>
-
-              <div className="card">
-                <div className="card-sec-hdr">CREDENTIALS</div>
-                <div className="fstk">
-                  <div className="field">
-                    <label className="fld-lbl">Encrypted Keystore (base64)</label>
-                    <textarea className="inp ta inp-mono" rows={3} value={dp.keystore}
-                      placeholder="Paste keystore from Keygen tab…"
-                      onChange={e => setDp(p => ({ ...p, keystore: e.target.value }))} />
-                  </div>
-                  <div className="field">
-                    <label className="fld-lbl">Passphrase</label>
-                    <div className="inp-wrap">
-                      <input className="inp" type={showPass ? 'text' : 'password'} value={dp.pass}
-                        placeholder="Keystore passphrase"
-                        onChange={e => setDp(p => ({ ...p, pass: e.target.value }))} />
-                      <button className="inp-ico" type="button" onClick={() => setShowPass(v => !v)}>
-                        <IEye off={showPass} />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="field">
-                    <label className="fld-lbl">Genesis Hash</label>
-                    <input className="inp inp-mono" type="text" value={dp.genesis} placeholder="64-char hex"
-                      onChange={e => setDp(p => ({ ...p, genesis: e.target.value }))} />
-                  </div>
-                </div>
-                <div className="coll-hdr" onClick={() => setDp(p => ({ ...p, peersOpen: !p.peersOpen }))}>
-                  <span>Bootstrap Peers ({dp.peers.split('\n').filter(Boolean).length})</span>
-                  <IChev open={dp.peersOpen} />
-                </div>
-                <div className={`coll-body${dp.peersOpen ? ' open' : ' closed'}`}>
-                  <textarea className="inp ta inp-mono mt2" rows={5} value={dp.peers}
-                    onChange={e => setDp(p => ({ ...p, peers: e.target.value }))} />
-                </div>
-              </div>
-
-              <button className="btn btn-p btn-full"
-                disabled={!dp.host || !dp.keystore || !dp.pass || dp.deplSt === 'deploying'}
-                onClick={onDeploy}>
-                {dp.deplSt === 'deploying' ? <><span className="btn-spinner" />Deploying…</>
-                  : dp.deplSt === 'done'   ? '✓  Deployed'
-                  : dp.deplSt === 'error'  ? 'Retry Deploy'
-                  : '▶  Deploy Node'}
-              </button>
-            </div>
-
-            <div className="dp-aside">
-              <div className="card" style={{ padding: 'var(--s4) var(--s5)' }}>
-                <div className="card-sec-hdr">ORACLE VPS — QUICK SELECT</div>
-                <div className="qs-list">
-                  {NODES.map(n => (
-                    <div key={n.name} className={`nr${dp.selNode === n.name ? ' sel' : ''}`}
-                      onClick={() => setDp(p => ({
-                        ...p, selNode: n.name, host: n.ip,
-                        keyPath: `C:\\Users\\HOPEX\\.ssh\\${n.key}`,
-                        connSt: 'idle', connMsg: '',
-                      }))}>
-                      <div className="nr-info">
-                        <span className="nr-name">{n.name}</span>
-                        <span className="nr-ip">{n.ip}</span>
-                      </div>
-                      <span style={{ fontSize: 'var(--xs)', color: 'var(--tp)' }}>Select →</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="log-panel">
-                <div className="lp-hdr">
-                  <span className="lp-ttl">OUTPUT</span>
-                  {dp.logs.length > 0 && <span className="lp-cnt">{dp.logs.length} lines</span>}
-                </div>
-                <div className="lp-body" ref={logRef}>
-                  {dp.logs.length === 0
-                    ? <div className="lp-empty"><span className="lp-empty-txt">Deployment output will appear here…</span></div>
-                    : dp.logs.map((l, i) => (
-                      <div key={i} className={`log-ln log-ln--${l.type}`}>
-                        <span className="log-ln__pfx">
-                          {l.type === 'cmd' ? '$' : l.type === 'ok' ? '✓' : l.type === 'err' ? '✗' : '→'}
-                        </span>
-                        <span className="log-ln__txt">{l.text}</span>
-                      </div>
-                    ))
-                  }
-                </div>
-              </div>
-            </div>
+    <div className="app-shell">
+      {renderSidebar()}
+      <div className="content-area">
+        {appView === 'keygen' && (
+          <div className="kg-wrap">
+            {renderSteps()}
+            {renderKg()}
           </div>
         )}
-
-      </div></main>
+        {appView === 'deploy'   && renderDeploySection()}
+        {appView === 'settings' && renderSettingsSection()}
+      </div>
+      {showDialog && renderDialog()}
     </div>
   )
 }
