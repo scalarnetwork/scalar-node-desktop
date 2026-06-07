@@ -185,9 +185,10 @@ export default function App() {
   const ramStatus = (r: RamInfo | null) => {
     if (!r) return null
     const gb = r.available_mb / 1024
+    if (selTier === 'C') return { color:'var(--ok-t)', bg:'var(--ok-bg)', icon:'✅', label:`${gb.toFixed(1)} GB — cukup untuk Tier C` }
     if (gb >= 5) return { color:'var(--ok-t)', bg:'var(--ok-bg)', icon:'✅', label:`${gb.toFixed(1)} GB tersedia — cukup` }
-    if (gb >= 4) return { color:'var(--wn-t)', bg:'var(--wn-bg)', icon:'⚠️', label:`${gb.toFixed(1)} GB tersedia — tutup aplikasi lain` }
-    return        { color:'var(--er-t)', bg:'var(--er-bg)', icon:'❌', label:`${gb.toFixed(1)} GB — TIDAK CUKUP` }
+    if (gb >= 4) return { color:'var(--wn-t)', bg:'var(--wn-bg)', icon:'⚠️', label:`${gb.toFixed(1)} GB — tutup aplikasi lain` }
+    return       { color:'var(--er-t)', bg:'var(--er-bg)', icon:'❌', label:`${gb.toFixed(1)} GB — TIDAK CUKUP` }
   }
 
   const copy = (id: string, text: string) => {
