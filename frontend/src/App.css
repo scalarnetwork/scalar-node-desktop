@@ -492,7 +492,7 @@
 
 /* Tier comparison table */
 .tier-tbl { width:100%; border-collapse:collapse; font-size:var(--sm); border-radius:var(--r-md); overflow:hidden; }
-.tier-tbl th, .tier-tbl td { padding:9px 12px; text-align:left; border-bottom:1px solid var(--bs); }
+.tier-tbl th, .tier-tbl td { padding:9px 12px; text-align:left; border-bottom:1px solid var(--bs); font-family:var(--font); font-size:var(--sm); }
 .tier-tbl thead th { background:var(--bg2); font-weight:var(--fw6); color:var(--t1); }
 .tier-tbl td:first-child { color:var(--t3); font-weight:var(--fw5); }
 .tier-tbl td:nth-child(2) { color:var(--t1); font-weight:var(--fw5); }
@@ -548,3 +548,23 @@
   margin-top:auto;
 }
 .ob-footer-note { font-size:var(--xs); color:var(--t3); max-width:360px; line-height:1.5; }
+
+/* ── Onboarding font override (browser reset) ── */
+.ob-page, .ob-page * {
+  font-family: var(--font);
+}
+.ob-page table, .ob-page th, .ob-page td,
+.ob-page button, .ob-page input {
+  font-family: var(--font);
+  font-size: var(--base);
+}
+.ob-title  { font-size: var(--xxl); }
+.ob-sub    { font-size: var(--base); }
+.ob-body   { font-size: var(--base); }
+.ob-sec-lbl{ font-size: var(--xs);  }
+.ob-what-item__ttl { font-size: var(--base); }
+.ob-what-item__dsc { font-size: var(--sm);  }
+.ob-needs-item     { font-size: var(--base); }
+.ram-note          { font-size: var(--base); }
+.ram-result        { font-size: var(--base); }
+.ob-footer-note    { font-size: var(--sm);  }
