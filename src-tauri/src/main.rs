@@ -5,6 +5,7 @@ use sysinfo::System;
 use std::fs;
 use std::path::PathBuf;
 use tauri::Manager;
+use tauri::Emitter;
 mod gui;
 
 use daemon::keygen;
@@ -55,60 +56,73 @@ async fn test_ssh_connection(host: String, username: String, key_path: String) -
 /// Deploy a node to a VPS.
 #[tauri::command]
 async fn deploy_node(
+    app: tauri::AppHandle,
     host: String,
     username: String,
     key_path: String,
     keystore_base64: String,
     passphrase: String,
-    _genesis_hash: String, // embedded in keystore; VPS reads genesis_hash.txt
+    _genesis_hash: String,
     dial_peers: Vec<String>,
 ) -> Result<String, String> {
+    let emit = |t: &str, msg: &str| {
+        app.emit("deploy_log", serde_json::json!({"t": t, "msg": msg})).ok();
+    };
+
+    emit("cmd", &format!("→ Connecting to {}@{}…", username, host));
     let config = SshConfig::new(&host, &username, &key_path);
-    
-    let keystore_bytes = base64::engine::general_purpose::STANDARD.decode(&keystore_base64)
+
+    let keystore_bytes = base64::engine::general_purpose::STANDARD
+        .decode(&keystore_base64)
         .map_err(|e| format!("Failed to decode keystore: {}", e))?;
-    
+
+    emit("inf", "Uploading keystore to VPS…");
     config.upload_bytes(&keystore_bytes, "/tmp/node_keystore.bin", 0o600)
         .map_err(|e| format!("Failed to upload keystore: {}", e))?;
+    emit("ok", "Keystore uploaded ✓");
 
-    // Upload passphrase directly via SCP — never expose passphrase in shell commands
+    emit("inf", "Uploading passphrase…");
     config.upload_bytes(passphrase.as_bytes(), "/tmp/.scalar_pp_tmp", 0o600)
         .map_err(|e| format!("Failed to upload passphrase: {}", e))?;
+    emit("ok", "Passphrase uploaded ✓");
 
-    let cmd_setup = "sudo mkdir -p /etc/scalar &&         sudo mv /tmp/.scalar_pp_tmp /etc/scalar/.passphrase &&         sudo chmod 600 /etc/scalar/.passphrase &&         sudo mv /tmp/node_keystore.bin /etc/scalar/node_keystore.bin &&         sudo chmod 600 /etc/scalar/node_keystore.bin";
+    emit("cmd", "Configuring /etc/scalar on VPS…");
+    let cmd_setup = "sudo mkdir -p /etc/scalar && \
+        sudo mv /tmp/.scalar_pp_tmp /etc/scalar/.passphrase && \
+        sudo chmod 600 /etc/scalar/.passphrase && \
+        sudo mv /tmp/node_keystore.bin /etc/scalar/node_keystore.bin && \
+        sudo chmod 600 /etc/scalar/node_keystore.bin";
     config.execute(cmd_setup)
         .map_err(|e| format!("Failed to set up keystore on VPS: {}", e))?;
+    emit("ok", "Keystore configured ✓");
 
     let exec_start_path = format!("/home/{}/scalar-core/target/release/scalar-node", username);
+    let dial_peers_str = dial_peers.join(",");
+
     let deploy_script = format!(
         r#"#!/bin/bash
 set -e
 echo "=== SCALAR NODE DEPLOYMENT ==="
-
 echo "[1/5] Installing system dependencies..."
-sudo apt-get update -qq && sudo apt-get install -y -qq curl build-essential pkg-config libssl-dev 2>&1 | tail -5
-
+sudo apt-get update -qq && sudo apt-get install -y -qq curl build-essential pkg-config libssl-dev git
 if ! command -v rustc &> /dev/null; then
     echo "[2/5] Installing Rust..."
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
     source "$HOME/.cargo/env"
 else
     echo "[2/5] Rust already installed: $(rustc --version)"
 fi
-
+source "$HOME/.cargo/env" 2>/dev/null || true
 REPO_DIR="$HOME/scalar-core"
 if [ -d "$REPO_DIR" ]; then
-    echo "[3/5] Recloning scalar-core (ensuring clean state)..."
-    rm -rf "$REPO_DIR"
-fi
-if [ ! -d "$REPO_DIR" ]; then
+    echo "[3/5] Updating scalar-core..."
+    cd "$REPO_DIR" && git pull
+else
     echo "[3/5] Cloning scalar-core..."
     git clone https://github.com/berdywandara/scalar-core.git "$REPO_DIR"
 fi
-
 echo "[4/5] Building scalar-node (release)..."
-cd "$REPO_DIR" && cargo build --release -p scalar-node
-
+cd "$REPO_DIR" && cargo build --release -p scalar-node 2>&1
 echo "[5/5] Setting up systemd service..."
 sudo tee /etc/systemd/system/scalar-node.service > /dev/null << 'SERVICE_EOF'
 [Unit]
@@ -117,43 +131,47 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=simple
 User={username}
-WorkingDirectory=/home/{username}/scalar-core
-ExecStart={exec_start} run --keystore=/etc/scalar/node_keystore.bin --passphrase-file=/etc/scalar/.passphrase --port=7777 --p2p-port=17777 {dial_args}
-Restart=always
-RestartSec=15s
+WorkingDirectory=/home/{username}
+ExecStart={exec_start_path} run --keystore /etc/scalar/node_keystore.bin
+EnvironmentFile=-/etc/scalar/.env
+Restart=on-failure
+RestartSec=10
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=scalar-node
 
 [Install]
 WantedBy=multi-user.target
 SERVICE_EOF
-
 sudo systemctl daemon-reload
 sudo systemctl enable scalar-node
-sudo systemctl start scalar-node
-
-echo "✅ Node deployed successfully!"
+sudo systemctl restart scalar-node
+echo "=== DEPLOYMENT COMPLETE ==="
 "#,
         username = username,
-        exec_start = exec_start_path,
-        dial_args = dial_peers.iter().map(|p| format!("--dial={}", p)).collect::<Vec<_>>().join(" ")
+        exec_start_path = exec_start_path,
     );
 
-    let remote_script_path = "/tmp/deploy_node.sh";
-    config.upload_bytes(deploy_script.as_bytes(), remote_script_path, 0o700)
-        .map_err(|e| format!("Failed to upload deploy script: {}", e))?;
+    emit("cmd", "Running deployment script — this may take 15–30 minutes…");
+    emit("inf", "Do not close this application.");
 
-    let result = config.execute(&format!("bash {}", remote_script_path))
-        .map_err(|e| format!("Deployment script failed: {}", e))?;
+    let config_clone = config.clone();
+    let app_clone    = app.clone();
 
-    if result.exit_code != 0 {
-        return Err(format!("Deployment failed with exit code {}: {}", result.exit_code, result.stderr));
+    let exit_code = tokio::task::spawn_blocking(move || {
+        config_clone.execute_streaming(&deploy_script, move |line| {
+            app_clone.emit("deploy_log", serde_json::json!({"t": "inf", "msg": line})).ok();
+        })
+    }).await.map_err(|e| e.to_string())??;
+
+    if exit_code != 0 {
+        let msg = format!("Deployment failed with exit code {}", exit_code);
+        emit("err", &msg);
+        return Err(msg);
     }
 
-    Ok(format!("Node deployed successfully to {}! Check status with: sudo systemctl status scalar-node", host))
+    emit("ok", "✓ Node deployed and running!");
+    Ok("Deployment complete".to_string())
 }
 
 #[tauri::command]

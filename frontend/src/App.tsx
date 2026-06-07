@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import './App.css'
 
 // ── Types ────────────────────────────────────────────────────────
@@ -128,6 +129,18 @@ export default function App() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [ram,     setRam]     = useState<RamInfo | null>(null)
   const [elapsed, setElapsed] = useState(0)
+
+
+  // ── Deploy log streaming ──────────────────────────────────────
+  useEffect(() => {
+    let unlisten: (() => void) | null = null
+    listen<{t: string; msg: string}>('deploy_log', event => {
+      const { t, msg } = event.payload
+      const type = t === 'ok' ? 'ok' : t === 'err' ? 'err' : t === 'cmd' ? 'cmd' : 'inf'
+      setDp(p => ({ ...p, logs: [...p.logs, { type, text: msg }] }))
+    }).then(fn => { unlisten = fn })
+    return () => { if (unlisten) unlisten() }
+  }, [])
 
   useEffect(() => {
     const fetchRam = async () => {

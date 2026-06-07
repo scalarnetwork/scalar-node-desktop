@@ -167,7 +167,50 @@ impl SshConfig {
     pub fn test_connection(&self) -> bool {
         self.connect().is_ok()
     }
+
+
+
+    /// Execute a command and stream output line-by-line via callback.
+    pub fn execute_streaming<F>(&self, command: &str, mut on_line: F) -> Result<i32, String>
+    where
+        F: FnMut(String),
+    {
+        use std::io::ErrorKind;
+        let session = self.connect()?;
+        let mut channel = session
+            .channel_session()
+            .map_err(|e| format!("Channel error: {}", e))?;
+        channel
+            .exec(&format!("{} 2>&1", command))
+            .map_err(|e| format!("Exec error: {}", e))?;
+
+        let mut remainder = String::new();
+        let mut buf = [0u8; 4096];
+        loop {
+            match channel.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => {
+                    let chunk = String::from_utf8_lossy(&buf[..n]).to_string();
+                    remainder.push_str(&chunk);
+                    while let Some(pos) = remainder.find('\n') {
+                        let line = remainder[..pos].trim_end_matches('\r').to_string();
+                        if !line.is_empty() { on_line(line); }
+                        remainder = remainder[pos + 1..].to_string();
+                    }
+                }
+                Err(e) if e.kind() == ErrorKind::WouldBlock => {
+                    std::thread::sleep(std::time::Duration::from_millis(80));
+                }
+                Err(_) => break,
+            }
+        }
+        if !remainder.trim().is_empty() { on_line(remainder.trim().to_string()); }
+        channel.wait_close().ok();
+        Ok(channel.exit_status().unwrap_or(-1))
+    }
+
 }
+
 
 #[cfg(test)]
 mod tests {
@@ -195,4 +238,5 @@ mod tests {
         );
         assert!(!config.test_connection());
     }
+
 }
