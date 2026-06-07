@@ -232,6 +232,7 @@ fn main() {
             save_servers,
             load_servers
         ])
+        .plugin(tauri_plugin_dialog::init())
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
