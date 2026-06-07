@@ -243,8 +243,8 @@ export default function App() {
     try {
       await invoke('deploy_node', {
         host: dp.host, username: dp.user, keyPath: dp.keyPath,
-        keystore: dp.keystore, passphrase: dp.pass, genesisHash: dp.genesis,
-        bootstrapPeers: dp.peers.split('\n').filter(Boolean),
+        keystoreBase64: dp.keystore, passphrase: dp.pass, genesisHash: dp.genesis,
+        dialPeers: dp.peers.split('\n').filter(Boolean),
       })
       addLog('ok', 'Node deployed and service started.')
       setDp(p => ({ ...p, deplSt: 'done' }))
