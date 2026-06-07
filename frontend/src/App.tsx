@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import './App.css'
 
 // ── Types ────────────────────────────────────────────────────────
@@ -87,6 +88,11 @@ const IAlert = () => (
     <line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/>
   </svg>
 )
+const IFolder = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+  </svg>
+)
 const IChev = ({ open }: { open: boolean }) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
     style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>
@@ -164,6 +170,16 @@ export default function App() {
     setDp(p => ({ ...p, host: srv.host, user: srv.username, keyPath: srv.keyPath, connSt:'idle', connMsg:'' }))
     setSrvForm({ label:'', host:'', username:'ubuntu', keyPath:'' })
     setShowSrvFrm(false)
+  }
+
+  const pickKeyFile = async () => {
+    try {
+      const selected = await openDialog({
+        multiple: false,
+        title: 'Pilih SSH Private Key',
+      })
+      if (selected) setSrvForm(p => ({ ...p, keyPath: selected as string }))
+    } catch (_) {}
   }
 
   const deleteServer = async (id: string) => {
@@ -396,9 +412,15 @@ export default function App() {
           </div>
           <div className="field">
             <label className="fld-lbl">SSH Key Path</label>
-            <input className="inp inp-mono" type="text" value={srvForm.keyPath}
-              placeholder="C:\Users\HOPEX\.ssh\scalar-node.key"
-              onChange={e => setSrvForm(p => ({...p, keyPath:e.target.value}))} />
+            <div className="inp-wrap">
+              <input className="inp inp-mono" type="text" value={srvForm.keyPath}
+                placeholder="C:\Users\HOPEX\.ssh\scalar-node.key"
+                onChange={e => setSrvForm(p => ({...p, keyPath:e.target.value}))} />
+              <button className="inp-ico" type="button" title="Browse file"
+                onClick={pickKeyFile}>
+                <IFolder />
+              </button>
+            </div>
           </div>
           <div className="srv-form-footer">
             <button className="btn btn-s" onClick={() => setShowSrvFrm(false)}>Batal</button>
