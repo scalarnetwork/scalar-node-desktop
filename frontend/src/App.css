@@ -456,6 +456,7 @@ a { color: inherit; text-decoration: none; }
   border-radius: var(--r-md);
   outline: none;
   transition: border-color var(--tf), box-shadow var(--tf);
+  appearance: none;
   -webkit-appearance: none;
 }
 .inp::placeholder { color: var(--t3); }
