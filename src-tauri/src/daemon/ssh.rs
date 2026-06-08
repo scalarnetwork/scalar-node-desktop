@@ -53,8 +53,8 @@ impl SshConfig {
         tcp.set_read_timeout(Some(std::time::Duration::from_secs(30)))
             .map_err(|e| format!("Failed to set timeout: {}", e))?;
 
-        let mut session = Session::new()
-            .map_err(|e| format!("Failed to create SSH session: {}", e))?;
+        let mut session =
+            Session::new().map_err(|e| format!("Failed to create SSH session: {}", e))?;
         session.set_tcp_stream(tcp);
         session
             .handshake()
@@ -62,11 +62,18 @@ impl SshConfig {
 
         // Authenticate with private key
         session
-            .userauth_pubkey_file(&self.username, None, Path::new(&self.private_key_path), None)
-            .map_err(|e| format!(
-                "SSH authentication failed for {}@{}. Key: {}. Error: {}",
-                self.username, self.host, self.private_key_path, e
-            ))?;
+            .userauth_pubkey_file(
+                &self.username,
+                None,
+                Path::new(&self.private_key_path),
+                None,
+            )
+            .map_err(|e| {
+                format!(
+                    "SSH authentication failed for {}@{}. Key: {}. Error: {}",
+                    self.username, self.host, self.private_key_path, e
+                )
+            })?;
 
         if !session.authenticated() {
             return Err(format!(
@@ -153,13 +160,21 @@ impl SshConfig {
     pub fn upload_bytes(&self, data: &[u8], remote_path: &str, mode: i32) -> Result<(), String> {
         let session = self.connect()?;
         let file_size = data.len() as u64;
-        let mut channel = session.scp_send(Path::new(remote_path), mode, file_size, None)
+        let mut channel = session
+            .scp_send(Path::new(remote_path), mode, file_size, None)
             .map_err(|e| format!("Failed to open SCP channel: {}", e))?;
-        channel.write_all(data)
+        channel
+            .write_all(data)
             .map_err(|e| format!("Failed to write data via SCP: {}", e))?;
-        channel.send_eof().map_err(|e| format!("Failed to send EOF: {}", e))?;
-        channel.wait_eof().map_err(|e| format!("Failed to wait EOF: {}", e))?;
-        channel.wait_close().map_err(|e| format!("Failed to close SCP channel: {}", e))?;
+        channel
+            .send_eof()
+            .map_err(|e| format!("Failed to send EOF: {}", e))?;
+        channel
+            .wait_eof()
+            .map_err(|e| format!("Failed to wait EOF: {}", e))?;
+        channel
+            .wait_close()
+            .map_err(|e| format!("Failed to close SCP channel: {}", e))?;
         Ok(())
     }
 
@@ -167,8 +182,6 @@ impl SshConfig {
     pub fn test_connection(&self) -> bool {
         self.connect().is_ok()
     }
-
-
 
     /// Execute a command and stream output line-by-line via callback.
     pub fn execute_streaming<F>(&self, command: &str, mut on_line: F) -> Result<i32, String>
@@ -194,7 +207,9 @@ impl SshConfig {
                     remainder.push_str(&chunk);
                     while let Some(pos) = remainder.find('\n') {
                         let line = remainder[..pos].trim_end_matches('\r').to_string();
-                        if !line.is_empty() { on_line(line); }
+                        if !line.is_empty() {
+                            on_line(line);
+                        }
                         remainder = remainder[pos + 1..].to_string();
                     }
                 }
@@ -204,13 +219,13 @@ impl SshConfig {
                 Err(_) => break,
             }
         }
-        if !remainder.trim().is_empty() { on_line(remainder.trim().to_string()); }
+        if !remainder.trim().is_empty() {
+            on_line(remainder.trim().to_string());
+        }
         channel.wait_close().ok();
         Ok(channel.exit_status().unwrap_or(-1))
     }
-
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -218,11 +233,7 @@ mod tests {
 
     #[test]
     fn test_ssh_config_creation() {
-        let config = SshConfig::new(
-            "132.145.39.75",
-            "ubuntu",
-            "~/.ssh/scalar-node-1.key",
-        );
+        let config = SshConfig::new("132.145.39.75", "ubuntu", "~/.ssh/scalar-node-1.key");
         assert_eq!(config.host, "132.145.39.75");
         assert_eq!(config.username, "ubuntu");
         assert_eq!(config.port, 22);
@@ -231,12 +242,7 @@ mod tests {
 
     #[test]
     fn test_connection_failure_bad_host() {
-        let config = SshConfig::new(
-            "0.0.0.0",
-            "ubuntu",
-            "/nonexistent/key",
-        );
+        let config = SshConfig::new("0.0.0.0", "ubuntu", "/nonexistent/key");
         assert!(!config.test_connection());
     }
-
 }
