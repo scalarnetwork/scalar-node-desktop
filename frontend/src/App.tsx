@@ -9,7 +9,7 @@ type KgStep = 'idle' | 'mnemonic' | 'confirm_word' | 'passphrase' | 'genesis' | 
 type ConnSt = 'idle' | 'testing' | 'ok' | 'err'
 type DeplSt = 'idle' | 'deploying' | 'done' | 'error'
 
-type AppView = 'method-select' | 'keygen' | 'deploy' | 'manage' | 'settings'
+type AppView = 'method-select' | 'keygen' | 'deploy' | 'manage' | 'info' | 'settings'
 type Method  = 'ssh' | 'local'
 
 interface Server {
@@ -42,7 +42,6 @@ interface MgState {
   err: string
 }
 interface LogLine { type: 'cmd' | 'ok' | 'err' | 'inf'; text: string }
-interface RamInfo { total_mb: number; available_mb: number }
 
 // ── Constants ────────────────────────────────────────────────────
 const PEERS = [
@@ -142,7 +141,6 @@ export default function App() {
   })
   const logRef = useRef<HTMLDivElement>(null)
   const mgLogRef = useRef<HTMLDivElement>(null)
-  const [ram,     setRam]     = useState<RamInfo | null>(null)
 
 
   // ── Deploy log streaming ──────────────────────────────────────
@@ -166,14 +164,6 @@ export default function App() {
     return () => { if (unlisten) unlisten() }
   }, [])
 
-  useEffect(() => {
-    const fetchRam = async () => {
-      try { setRam(await invoke<RamInfo>('get_system_ram')) } catch (_) {}
-    }
-    fetchRam()
-    const id = setInterval(fetchRam, 5000)
-    return () => clearInterval(id)
-  }, [])
 
 
   useEffect(() => {
@@ -239,10 +229,6 @@ export default function App() {
   }
 
 
-  const onChangeTier = async (t: SelTier) => {
-    setSelTier(t)
-    try { await invoke('save_setting', { key:'tier', value:t }) } catch (_) {}
-  }
 
   // ── Init: load saved settings ──────────────────────────────────
   useEffect(() => {
@@ -272,14 +258,6 @@ export default function App() {
   }, [])
 
 
-  const ramStatus = (r: RamInfo | null) => {
-    if (!r) return null
-    const gb = r.available_mb / 1024
-    if (selTier === 'C') return { color:'var(--ok-t)', bg:'var(--ok-bg)', icon:'✅', label:`${gb.toFixed(1)} GB — cukup untuk Tier C` }
-    if (gb >= 5) return { color:'var(--ok-t)', bg:'var(--ok-bg)', icon:'✅', label:`${gb.toFixed(1)} GB tersedia — cukup` }
-    if (gb >= 4) return { color:'var(--wn-t)', bg:'var(--wn-bg)', icon:'⚠️', label:`${gb.toFixed(1)} GB — tutup aplikasi lain` }
-    return       { color:'var(--er-t)', bg:'var(--er-bg)', icon:'❌', label:`${gb.toFixed(1)} GB — TIDAK CUKUP` }
-  }
 
   const copy = (id: string, text: string) => {
     navigator.clipboard.writeText(text)
@@ -423,6 +401,8 @@ export default function App() {
           onClick={() => setAppView('deploy')}>Deploy</button>
         <button className={`nav-item${appView==='manage'?' nav-item--active':''}`}
           onClick={() => setAppView('manage')}>Manage</button>
+        <button className={`nav-item${appView==='info'?' nav-item--active':''}`}
+          onClick={() => setAppView('info')}>Info</button>
       </div>
       <div className="sidebar__spacer" />
       <div className="sidebar__bottom">
@@ -652,29 +632,7 @@ export default function App() {
 
       <hr className="settings-divider" />
 
-      <div className="settings-section">
-        <p className="settings-sec-lbl">Tier Node</p>
-        <label className="radio-item" onClick={() => onChangeTier('A')}>
-          <input type="radio" readOnly checked={selTier==='A'} onChange={() => onChangeTier('A')} />
-          <div>
-            <p className="radio-item__lbl">Tier A — Full Node</p>
-            <p className="radio-item__sub">Dedicated hardware · NodeScore tinggi · NMT eligible</p>
-          </div>
-        </label>
-        <label className="radio-item" onClick={() => onChangeTier('C')}>
-          <input type="radio" readOnly checked={selTier==='C'} onChange={() => onChangeTier('C')} />
-          <div>
-            <p className="radio-item__lbl">Tier C — Terbatas</p>
-            <p className="radio-item__sub">Mobile / low-resource · NodeScore terbatas</p>
-          </div>
-        </label>
-        <p className="settings-info">
-          Tier menentukan NodeScore dan eligibilitas jaringan — bukan derivasi Node ID.
-          Node ID diturunkan dari mnemonic + genesis hash via BLAKE3.
-        </p>
-      </div>
 
-      <hr className="settings-divider" />
 
       <div className="settings-section">
         <p className="settings-sec-lbl">Tentang</p>
@@ -820,6 +778,98 @@ export default function App() {
     )
   }
 
+  // ── Info Section ────────────────────────────────────────────────────────────
+  const renderInfoSection = () => (
+    <div className="settings-page">
+      <p className="page-title-lg">Info</p>
+      <p style={{ fontSize:'var(--base)', color:'var(--t2)', marginBottom:'var(--s16)' }}>
+        Panduan singkat tentang konsep utama Scalar Node Desktop.
+      </p>
+
+      <div className="settings-section">
+        <p className="settings-sec-lbl">Mnemonic</p>
+        <p className="settings-info">
+          24 kata yang berfungsi sebagai kunci pemulihan node. Kata pertama selalu "scalar",
+          diikuti 23 kata BIP-39 acak (253-bit entropy). Simpan offline — jangan difoto atau
+          disimpan secara digital. Tanpa mnemonic, Node ID tidak dapat dibuat ulang.
+        </p>
+      </div>
+
+      <hr className="settings-divider" />
+
+      <div className="settings-section">
+        <p className="settings-sec-lbl">Node ID</p>
+        <p className="settings-info">
+          Identitas unik node di jaringan Scalar. Dibuat dari mnemonic + genesis hash
+          menggunakan BLAKE3 (instan, &lt;1 ms). Input yang sama selalu menghasilkan Node ID
+          yang sama — deterministik dan dapat direproduksi kapan saja dari mnemonic asli.
+        </p>
+      </div>
+
+      <hr className="settings-divider" />
+
+      <div className="settings-section">
+        <p className="settings-sec-lbl">Keystore</p>
+        <p className="settings-info">
+          File 121 bytes yang menyimpan Node ID dan Node Key secara terenkripsi menggunakan
+          Argon2id (64 MB, ~30 detik). Dikirim ke server VPS untuk menjalankan node.
+          Tanpa passphrase yang benar, keystore tidak dapat dibuka.
+        </p>
+      </div>
+
+      <hr className="settings-divider" />
+
+      <div className="settings-section">
+        <p className="settings-sec-lbl">Passphrase</p>
+        <p className="settings-info">
+          Kata sandi yang melindungi keystore. Diperlukan setiap kali node dijalankan.
+          Minimum 8 karakter. Tidak dapat dipulihkan — simpan bersama mnemonic di tempat
+          yang aman.
+        </p>
+      </div>
+
+      <hr className="settings-divider" />
+
+      <div className="settings-section">
+        <p className="settings-sec-lbl">Genesis Hash</p>
+        <p className="settings-info">
+          Hash 64 karakter hex dari blok genesis jaringan Scalar. Mengikat Node ID ke
+          jaringan spesifik — testnet dan mainnet memiliki genesis hash yang berbeda.
+          Dapatkan dari administrator jaringan atau dokumentasi resmi.
+        </p>
+      </div>
+
+      <hr className="settings-divider" />
+
+      <div className="settings-section">
+        <p className="settings-sec-lbl">NodeScore</p>
+        <p className="settings-info">
+          Skor performa node (0–1.000.000). Ditentukan oleh uptime, alignment root, dan
+          longevity. Mempengaruhi Governance Power dan eligibilitas sebagai NMT peer.
+          Node dengan NodeScore di atas 800.000 eligible untuk peran agregator jaringan.
+        </p>
+      </div>
+
+      <hr className="settings-divider" />
+
+      <div className="settings-section">
+        <p className="settings-sec-lbl">Alur Penggunaan</p>
+        <p className="settings-info">
+          1. Keygen — generate mnemonic, konfirmasi 3 kata, set passphrase, masukkan
+          genesis hash. Keystore terenkripsi siap.
+        </p>
+        <p className="settings-info" style={{ marginTop:'var(--s8)' }}>
+          2. Deploy — pilih server VPS, paste keystore, masukkan passphrase dan genesis
+          hash, lalu deploy. Scalar node berjalan sebagai systemd service.
+        </p>
+        <p className="settings-info" style={{ marginTop:'var(--s8)' }}>
+          3. Manage — pantau status node, lihat log, start/stop, atau reset VPS jika
+          diperlukan sebelum deploy ulang.
+        </p>
+      </div>
+    </div>
+  )
+
   const renderMethodSelect = () => (
     <div className="ms-page">
       <div className="ms-inner">
@@ -905,27 +955,8 @@ export default function App() {
         <div className="warn-box" style={{ maxWidth: 400, textAlign: 'left' }}>
           ⚠ Your mnemonic is the <strong>only recovery path</strong>. Write it down first.
         </div>
-        <div className="info-panel" style={{ width:'100%', maxWidth:400, textAlign:'left' }}>
-          <div className="info-panel__item">
-            <span className="info-panel__term">Node ID</span>
-            <span className="info-panel__desc">Identitas unik node kamu di jaringan Scalar, dibuat dari 24 kata kunci + genesis hash via BLAKE3.</span>
-          </div>
-          <div className="info-panel__item">
-            <span className="info-panel__term">Keystore</span>
-            <span className="info-panel__desc">File terenkripsi 121 bytes yang menyimpan Node ID. Dikirim ke server via SSH untuk menjalankan node.</span>
-          </div>
-          <div className="info-panel__item">
-            <span className="info-panel__term">NodeID</span>
-            <span className="info-panel__desc">Diturunkan via BLAKE3 (&lt;1 ms). Keystore wallet via Argon2id 64 MB (~30 detik).</span>
-          </div>
-        </div>
+
         {kg.err && <div className="err-box" style={{ maxWidth: 400 }}>{kg.err}</div>}
-        {(() => { const rs = ramStatus(ram); return rs ? (
-          <div style={{ maxWidth:400, padding:'8px 12px', borderRadius:'var(--r-md)',
-            border:'1px solid', fontSize:'var(--xs)', color:rs.color, background:rs.bg }}>
-            {rs.icon} RAM: {rs.label}
-          </div>
-        ) : null })()} 
         <button className="btn btn-p" style={{ minWidth: 240 }} onClick={onGenerate}>Generate Mnemonic</button>
       </div>
     )
@@ -1056,9 +1087,6 @@ export default function App() {
         <div className="drv-bars">{[1, 2, 3, 4, 5].map(n => <div key={n} className="drv-bar" />)}</div>
         <p className="drv-lbl">Deriving keys…</p>
         <p className="drv-sub">NodeID via BLAKE3 + NodeKey via Argon2id 64 MB (~30 detik)</p>
-        {ram && <p style={{ fontSize:'var(--xs)', color:'var(--t3)', margin:0 }}>
-          RAM: <span style={{ fontFamily:'var(--mono)', color:'var(--t2)' }}>{(ram.available_mb/1024).toFixed(1)} GB tersedia</span>
-        </p>}
         <div className="warn-box" style={{ maxWidth:400, fontSize:'var(--xs)' }}>
           ⚠ Jangan tutup aplikasi ini.
         </div>
@@ -1106,6 +1134,7 @@ export default function App() {
         )}
         {appView === 'deploy'   && renderDeploySection()}
         {appView === 'manage'   && renderManageSection()}
+        {appView === 'info'     && renderInfoSection()}
         {appView === 'settings' && renderSettingsSection()}
       </div>
       {showDialog && renderDialog()}
