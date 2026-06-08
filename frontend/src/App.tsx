@@ -9,7 +9,7 @@ type KgStep = 'idle' | 'mnemonic' | 'confirm_word' | 'passphrase' | 'genesis' | 
 type ConnSt = 'idle' | 'testing' | 'ok' | 'err'
 type DeplSt = 'idle' | 'deploying' | 'done' | 'error'
 
-type AppView = 'method-select' | 'keygen' | 'deploy' | 'settings'
+type AppView = 'method-select' | 'keygen' | 'deploy' | 'manage' | 'settings'
 type Method  = 'ssh' | 'local'
 
 interface Server {
@@ -32,6 +32,15 @@ interface DpState {
   connSt: ConnSt; connMsg: string
   deplSt: DeplSt; logs: LogLine[]
 }
+interface MgState {
+  status: 'idle' | 'active' | 'inactive' | 'failed' | 'unknown'
+  statusLoading: boolean
+  action: 'idle' | 'starting' | 'stopping' | 'resetting' | 'fetching_logs'
+  mgLogs: LogLine[]
+  logs: string
+  logsVisible: boolean
+  err: string
+}
 interface LogLine { type: 'cmd' | 'ok' | 'err' | 'inf'; text: string }
 interface RamInfo { total_mb: number; available_mb: number }
 
@@ -51,7 +60,6 @@ const KG_STEPS: { key: KgStep; label: string }[] = [
   { key: 'complete',     label: 'Complete'   },
 ]
 const KG_ORDER: KgStep[] = KG_STEPS.map(s => s.key)
-const TIER_A_SECS = 5400 // 90 min conservative estimate
 
 // ── Icons (inline SVG) ──────────────────────────────────────────────
 const IKey = () => (
@@ -128,10 +136,13 @@ export default function App() {
     pass: '', genesis: '', peers: PEERS, peersOpen: false, selNode: '',
     connSt: 'idle', connMsg: '', deplSt: 'idle', logs: [],
   })
+  const [mg, setMg] = useState<MgState>({
+    status: 'idle', statusLoading: false, action: 'idle',
+    mgLogs: [], logs: '', logsVisible: false, err: '',
+  })
   const logRef = useRef<HTMLDivElement>(null)
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const mgLogRef = useRef<HTMLDivElement>(null)
   const [ram,     setRam]     = useState<RamInfo | null>(null)
-  const [elapsed, setElapsed] = useState(0)
 
 
   // ── Deploy log streaming ──────────────────────────────────────
@@ -146,6 +157,16 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    let unlisten: (() => void) | null = null
+    listen<{t: string; msg: string}>('manage_log', event => {
+      const { t, msg } = event.payload
+      const type = t === 'ok' ? 'ok' : t === 'err' ? 'err' : t === 'cmd' ? 'cmd' : 'inf'
+      setMg(p => ({ ...p, mgLogs: [...p.mgLogs, { type, text: msg }] }))
+    }).then(fn => { unlisten = fn })
+    return () => { if (unlisten) unlisten() }
+  }, [])
+
+  useEffect(() => {
     const fetchRam = async () => {
       try { setRam(await invoke<RamInfo>('get_system_ram')) } catch (_) {}
     }
@@ -154,19 +175,14 @@ export default function App() {
     return () => clearInterval(id)
   }, [])
 
-  useEffect(() => {
-    if (kg.step === 'deriving') {
-      setElapsed(0)
-      timerRef.current = setInterval(() => setElapsed(e => e + 1), 1000)
-    } else {
-      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
-    }
-    return () => { if (timerRef.current) clearInterval(timerRef.current) }
-  }, [kg.step])
 
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
   }, [dp.logs])
+
+  useEffect(() => {
+    if (mgLogRef.current) mgLogRef.current.scrollTop = mgLogRef.current.scrollHeight
+  }, [mg.mgLogs])
 
   // ── Helpers ───────────────────────────────────────────────────
 
@@ -255,14 +271,6 @@ export default function App() {
     })()
   }, [])
 
-  const fmtTime = (sec: number): string => {
-    const h  = Math.floor(sec / 3600)
-    const m  = Math.floor((sec % 3600) / 60)
-    const sc = sec % 60
-    const mm = String(m).padStart(2, '0')
-    const ss = String(sc).padStart(2, '0')
-    return h > 0 ? `${h}h ${mm}m ${ss}s` : `${mm}m ${ss}s`
-  }
 
   const ramStatus = (r: RamInfo | null) => {
     if (!r) return null
