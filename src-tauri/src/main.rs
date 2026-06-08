@@ -17,7 +17,17 @@ use daemon::ssh::SshConfig;
 fn generate_mnemonic_cmd() -> Vec<String> {
     keygen::generate_mnemonic()
 }
-
+/// Result returned from encrypt_keystore_cmd.
+#[derive(serde::Serialize)]
+struct KeygenResult {
+    /// Encrypted keystore, base64-encoded (121 bytes → ~164 base64 chars).
+    keystore_b64: String,
+    /// Node ID as 64-char hex string. BLAKE3(b"scalar_nodeid"||mnemonic||genesis).
+    node_id_hex: String,
+    /// Wallet address for display reference: scl1{hex(SpendKey)}.
+    /// READ-ONLY — use Scalar Wallet App to manage coins.
+    wallet_address: String,
+}
 /// Encrypt keystore from mnemonic, genesis hash, and passphrase.
 /// NodeID derived via BLAKE3. SCALAR-PROTOCOL §3.1, SCALAR-TECHNICAL §10.5.
 #[tauri::command]
@@ -25,7 +35,7 @@ async fn encrypt_keystore_cmd(
     mnemonic: Vec<String>,
     genesis_hash: String,
     passphrase: String,
-) -> Result<String, String> {
+) -> Result<KeygenResult, String> {
     if !keygen::validate_mnemonic(&mnemonic) {
         return Err("Invalid mnemonic".to_string());
     }
@@ -38,11 +48,17 @@ async fn encrypt_keystore_cmd(
     // NodeID: BLAKE3(b"scalar_nodeid" || mnemonic || genesis_hash). SCALAR-PROTOCOL §3.1.
     let mnemonic_str = mnemonic.join(" ");
     let node_id_full = keygen::derive_node_id(&mnemonic_str, &genesis_hash_bytes);
-    let node_key = keygen::derive_node_key(&mnemonic, &genesis_hash_bytes)?;
+    // Single Argon2id pass: NodeKey + SpendKey + ViewKey. SCALAR-PROTOCOL §11.1.
+    let all_keys = keygen::derive_all_keys(&mnemonic, &genesis_hash_bytes)?;
+    let node_key = all_keys.node_key;
+    let wallet_address = format!("scl1{}", hex::encode(all_keys.spend_key));
 
     let keystore = keygen::encrypt_keystore(&node_id_full, &node_key, &passphrase)?;
-
-    Ok(base64::engine::general_purpose::STANDARD.encode(&keystore))
+    Ok(KeygenResult {
+        keystore_b64: base64::engine::general_purpose::STANDARD.encode(&keystore),
+        node_id_hex: hex::encode(node_id_full),
+        wallet_address,
+    })
 }
 
 /// Test SSH connection to a VPS.
@@ -327,6 +343,12 @@ echo "=== RESET COMPLETE. Ready for deployment. ==="
     Ok("Reset complete".to_string())
 }
 
+/// Get the current application version.
+#[tauri::command]
+fn app_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
 /// Close the application completely. Use before installing a new version.
 #[tauri::command]
 fn quit_app(app: tauri::AppHandle) {
@@ -422,6 +444,7 @@ fn main() {
             save_servers,
             load_servers,
             pick_ssh_key,
+            app_version,
             quit_app,
             get_node_status,
             start_node,

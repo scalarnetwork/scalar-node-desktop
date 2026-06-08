@@ -161,7 +161,80 @@ pub fn derive_node_key(mnemonic: &[String], genesis_hash: &[u8; 32]) -> Result<[
     Ok(node_key)
 }
 
-// ── Passphrase KDF ────────────────────────────────────────────────────────────
+// ── All Keys Derivation (single Argon2id pass) ───────────────────────────────────
+
+/// All keys derived from mnemonic in a single Argon2id pass.
+pub struct AllKeys {
+    pub node_key: [u8; 32],
+    pub spend_key: [u8; 32],
+    pub view_key: [u8; 32],
+}
+
+/// Derive NodeKey, SpendKey, and ViewKey from mnemonic + genesis_hash.
+/// Single Argon2id call (64MB, ~30 seconds). SCALAR-PROTOCOL §11.1.
+pub fn derive_all_keys(mnemonic: &[String], genesis_hash: &[u8; 32]) -> Result<AllKeys, String> {
+    let mnemonic_str = mnemonic.join(" ");
+
+    let mut wallet_salt = Vec::with_capacity(WALLET_KDF_PREFIX.len() + 32);
+    wallet_salt.extend_from_slice(WALLET_KDF_PREFIX);
+    wallet_salt.extend_from_slice(genesis_hash);
+
+    let params = Params::new(
+        WALLET_MEMORY_KIB,
+        WALLET_TIME,
+        WALLET_PARALLELISM,
+        Some(WALLET_OUTPUT_LEN),
+    )
+    .map_err(|e| format!("Argon2 wallet params error: {}", e))?;
+    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+    let mut seed = [0u8; WALLET_OUTPUT_LEN];
+    argon2
+        .hash_password_into(mnemonic_str.as_bytes(), &wallet_salt, &mut seed)
+        .map_err(|e| format!("Wallet seed derivation failed: {}", e))?;
+
+    let master_key: [u8; 32] = {
+        let mut h = blake3::Hasher::new();
+        h.update(&seed);
+        h.update(b"scalar_master");
+        *h.finalize().as_bytes()
+    };
+    let account_key: [u8; 32] = {
+        let mut h = blake3::Hasher::new();
+        h.update(&master_key);
+        h.update(b"account");
+        h.update(&0u64.to_le_bytes());
+        *h.finalize().as_bytes()
+    };
+    let node_key: [u8; 32] = {
+        let mut h = blake3::Hasher::new();
+        h.update(&account_key);
+        h.update(b"node");
+        *h.finalize().as_bytes()
+    };
+    let spend_key: [u8; 32] = {
+        let mut h = blake3::Hasher::new();
+        h.update(&account_key);
+        h.update(b"spend");
+        *h.finalize().as_bytes()
+    };
+    let view_key: [u8; 32] = {
+        let mut h = blake3::Hasher::new();
+        h.update(&account_key);
+        h.update(b"view");
+        *h.finalize().as_bytes()
+    };
+
+    // Zero seed from memory
+    seed.iter_mut().for_each(|b| *b = 0);
+
+    Ok(AllKeys {
+        node_key,
+        spend_key,
+        view_key,
+    })
+}
+
+// ── Passphrase KDF ──────────────────────────────────────────────────────────────
 
 /// Derive 32-byte encryption key from passphrase via Argon2id.
 /// SCALAR-TECHNICAL §10.5: 64MB, 3 iter, parallelism 1.
@@ -341,6 +414,27 @@ mod tests {
         let mut words = generate_mnemonic();
         words[1] = "notaword".to_string();
         assert!(!validate_mnemonic(&words));
+    }
+
+    #[test]
+    fn test_derive_all_keys_deterministic() {
+        let mnemonic: Vec<String> = TEST_MNEMONIC_24
+            .split_whitespace()
+            .map(String::from)
+            .collect();
+        let k1 = derive_all_keys(&mnemonic, &TEST_GENESIS).unwrap();
+        let k2 = derive_all_keys(&mnemonic, &TEST_GENESIS).unwrap();
+        assert_eq!(k1.node_key, k2.node_key);
+        assert_eq!(k1.spend_key, k2.spend_key);
+        assert_eq!(k1.view_key, k2.view_key);
+        assert_ne!(
+            k1.node_key, k1.spend_key,
+            "NodeKey must differ from SpendKey"
+        );
+        assert_ne!(
+            k1.spend_key, k1.view_key,
+            "SpendKey must differ from ViewKey"
+        );
     }
 
     #[test]
