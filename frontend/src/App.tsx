@@ -312,6 +312,58 @@ export default function App() {
     } catch (e) { setKg(p => ({ ...p, step: 'genesis', err: String(e) })) }
   }
 
+  // ── Manage handlers ─────────────────────────────────────────────
+  const onGetStatus = async () => {
+    if (!selServer) return
+    setMg(p => ({ ...p, statusLoading: true, err: '' }))
+    try {
+      const status = await invoke<string>('get_node_status', {
+        host: selServer.host, username: selServer.username, keyPath: selServer.keyPath,
+      })
+      setMg(p => ({ ...p, status: status.trim() as MgState['status'], statusLoading: false }))
+    } catch (e) { setMg(p => ({ ...p, status: 'unknown', statusLoading: false, err: String(e) })) }
+  }
+  const onStartNode = async () => {
+    if (!selServer) return
+    setMg(p => ({ ...p, action: 'starting', err: '' }))
+    try {
+      const status = await invoke<string>('start_node', {
+        host: selServer.host, username: selServer.username, keyPath: selServer.keyPath,
+      })
+      setMg(p => ({ ...p, action: 'idle', status: status.trim() as MgState['status'] }))
+    } catch (e) { setMg(p => ({ ...p, action: 'idle', err: String(e) })) }
+  }
+  const onStopNode = async () => {
+    if (!selServer) return
+    setMg(p => ({ ...p, action: 'stopping', err: '' }))
+    try {
+      const status = await invoke<string>('stop_node', {
+        host: selServer.host, username: selServer.username, keyPath: selServer.keyPath,
+      })
+      setMg(p => ({ ...p, action: 'idle', status: status.trim() as MgState['status'] }))
+    } catch (e) { setMg(p => ({ ...p, action: 'idle', err: String(e) })) }
+  }
+  const onGetLogs = async () => {
+    if (!selServer) return
+    setMg(p => ({ ...p, action: 'fetching_logs', logs: '', logsVisible: true, err: '' }))
+    try {
+      const logs = await invoke<string>('get_node_logs', {
+        host: selServer.host, username: selServer.username, keyPath: selServer.keyPath,
+      })
+      setMg(p => ({ ...p, action: 'idle', logs }))
+    } catch (e) { setMg(p => ({ ...p, action: 'idle', err: String(e) })) }
+  }
+  const onResetVps = async () => {
+    if (!selServer) return
+    setMg(p => ({ ...p, action: 'resetting', mgLogs: [], err: '' }))
+    try {
+      await invoke('reset_vps', {
+        host: selServer.host, username: selServer.username, keyPath: selServer.keyPath,
+      })
+      setMg(p => ({ ...p, action: 'idle' }))
+    } catch (e) { setMg(p => ({ ...p, action: 'idle', err: String(e) })) }
+  }
+
   // ── Deploy handlers ───────────────────────────────────────────
   const addLog = (type: LogLine['type'], text: string) =>
     setDp(p => ({ ...p, logs: [...p.logs, { type, text }] }))
@@ -361,6 +413,8 @@ export default function App() {
           onClick={() => setAppView('keygen')}>Keygen</button>
         <button className={`nav-item${appView==='deploy'?' nav-item--active':''}`}
           onClick={() => setAppView('deploy')}>Deploy</button>
+        <button className={`nav-item${appView==='manage'?' nav-item--active':''}`}
+          onClick={() => setAppView('manage')}>Manage</button>
       </div>
       <div className="sidebar__spacer" />
       <div className="sidebar__bottom">
@@ -630,6 +684,133 @@ export default function App() {
       </div>
     </div>
   )
+
+  // ── Manage Section ──────────────────────────────────────────────────────
+  const renderManageSection = () => {
+    const isActing = mg.action !== 'idle'
+    const statusColor =
+      mg.status === 'active'   ? 'var(--ok-t)' :
+      mg.status === 'inactive' ? 'var(--wn-t)' :
+      mg.status === 'failed'   ? 'var(--er-t)' : 'var(--t3)'
+
+    if (servers.length === 0) return (
+      <div className="dp-empty">
+        <svg className="dp-empty__ico" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/>
+          <line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/>
+        </svg>
+        <p className="dp-empty__title">Belum ada server</p>
+        <p className="dp-empty__sub">Tambahkan server di tab Deploy terlebih dahulu.</p>
+        <button className="btn btn-p btn-sm" onClick={() => setAppView('deploy')}>Ke Deploy →</button>
+      </div>
+    )
+
+    return (
+      <div className="dp-main">
+        <div className="dp-left">
+          <div className="srv-section">
+            <div className="srv-sec-hdr"><span className="srv-sec-lbl">Server</span></div>
+            <div className="srv-list">
+              {servers.map(sv => (
+                <div key={sv.id}
+                  className={`server-item${selServer?.id===sv.id?' server-item--active':''}`}
+                  onClick={() => { selectServer(sv); setMg(p => ({ ...p, status:'idle', logs:'', logsVisible:false, err:'' })) }}>
+                  <div className="srv-info">
+                    <span className="srv-label">{sv.label}</span>
+                    <span className="srv-ip">{sv.host}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {selServer && (
+            <div className="dp-form-section">
+              <div style={{ display:'flex', alignItems:'center', gap:'var(--s8)', marginBottom:'var(--s12)' }}>
+                <span style={{ fontSize:'var(--sm)', color:'var(--t3)' }}>Status:</span>
+                {mg.statusLoading
+                  ? <span className="btn-spinner btn-spinner--dark" />
+                  : mg.status === 'idle'
+                    ? <span style={{ fontSize:'var(--sm)', color:'var(--t3)' }}>—</span>
+                    : <span style={{ fontSize:'var(--sm)', fontWeight:'var(--fw6)', color:statusColor }}>● {mg.status}</span>
+                }
+                <button className="btn btn-g btn-sm" disabled={mg.statusLoading || isActing} onClick={onGetStatus}>Refresh</button>
+              </div>
+
+              <div className="c-row" style={{ marginBottom:'var(--s12)' }}>
+                <button className="btn btn-s btn-sm" disabled={isActing} onClick={onStartNode}>
+                  {mg.action==='starting' ? <><span className="btn-spinner btn-spinner--dark"/>Starting…</> : '▶ Start'}
+                </button>
+                <button className="btn btn-s btn-sm" disabled={isActing} onClick={onStopNode}>
+                  {mg.action==='stopping' ? <><span className="btn-spinner btn-spinner--dark"/>Stopping…</> : '■ Stop'}
+                </button>
+              </div>
+
+              <button className="btn btn-s btn-full" style={{ marginBottom:'var(--s12)' }}
+                disabled={isActing} onClick={onGetLogs}>
+                {mg.action==='fetching_logs' ? <><span className="btn-spinner btn-spinner--dark"/>Fetching…</> : '📋 View Logs (last 100 lines)'}
+              </button>
+
+              <div style={{ borderTop:'1px solid var(--bdr)', paddingTop:'var(--s12)' }}>
+                <p style={{ fontSize:'var(--xs)', color:'var(--t3)', margin:'0 0 var(--s8)' }}>
+                  ⚠ Reset menghapus instalasi lama dan rebuild (~5–10 menit). Deploy ulang keystore setelahnya.
+                </p>
+                <button className="btn btn-sm" style={{
+                    width:'100%', background:'var(--er-bg)', color:'var(--er-t)',
+                    border:'1px solid var(--er-t)', borderRadius:'var(--r-sm)', padding:'var(--s8) var(--s12)'
+                  }}
+                  disabled={isActing} onClick={onResetVps}>
+                  {mg.action==='resetting' ? <><span className="btn-spinner"/>Resetting VPS…</> : '🔄 Reset & Rebuild VPS'}
+                </button>
+              </div>
+
+              {mg.err && <div className="err-box" style={{ marginTop:'var(--s8)' }}>{mg.err}</div>}
+            </div>
+          )}
+        </div>
+
+        <div className="dp-right">
+          <div className="log-panel" style={{height:'100%'}}>
+            {mg.logsVisible && mg.action !== 'resetting' ? (
+              <>
+                <div className="lp-hdr">
+                  <span className="lp-ttl">NODE LOGS</span>
+                  <button className="btn btn-g btn-sm" onClick={() => setMg(p => ({...p, logsVisible:false}))}>✕ Tutup</button>
+                </div>
+                <div className="lp-body">
+                  {mg.action === 'fetching_logs'
+                    ? <div className="lp-empty"><span className="btn-spinner btn-spinner--dark"/></div>
+                    : <pre style={{ fontSize:'var(--xs)', color:'var(--t2)', whiteSpace:'pre-wrap',
+                          wordBreak:'break-all', fontFamily:'var(--mono)', margin:0, padding:'var(--s8)' }}>
+                        {mg.logs || 'No logs available.'}
+                      </pre>
+                  }
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="lp-hdr">
+                  <span className="lp-ttl">OUTPUT</span>
+                  {mg.mgLogs.length > 0 && <span className="lp-cnt">{mg.mgLogs.length} baris</span>}
+                </div>
+                <div className="lp-body" ref={mgLogRef}>
+                  {mg.mgLogs.length === 0
+                    ? <div className="lp-empty"><span className="lp-empty-txt">{selServer ? 'Pilih aksi di sebelah kiri.' : 'Pilih server terlebih dahulu.'}</span></div>
+                    : mg.mgLogs.map((l, i) => (
+                        <div key={i} className={`log-ln log-ln--${l.type}`}>
+                          <span className="log-ln__pfx">{l.type==='cmd'?'$':l.type==='ok'?'✓':l.type==='err'?'✗':'→'}</span>
+                          <span className="log-ln__txt">{l.text}</span>
+                        </div>
+                      ))
+                  }
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   const renderMethodSelect = () => (
     <div className="ms-page">
@@ -916,6 +1097,7 @@ export default function App() {
           </div>
         )}
         {appView === 'deploy'   && renderDeploySection()}
+        {appView === 'manage'   && renderManageSection()}
         {appView === 'settings' && renderSettingsSection()}
       </div>
       {showDialog && renderDialog()}

@@ -193,6 +193,140 @@ echo "=== DEPLOYMENT COMPLETE ==="
     Ok("Deployment complete".to_string())
 }
 
+/// Get scalar-node service status on a VPS.
+#[tauri::command]
+async fn get_node_status(
+    host: String,
+    username: String,
+    key_path: String,
+) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        let config = SshConfig::new(&host, &username, &key_path);
+        let result =
+            config.execute("sudo systemctl is-active scalar-node 2>/dev/null || echo inactive")?;
+        Ok(result.stdout.trim().to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Start the scalar-node service on a VPS.
+#[tauri::command]
+async fn start_node(host: String, username: String, key_path: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        let config = SshConfig::new(&host, &username, &key_path);
+        config.execute("sudo systemctl start scalar-node 2>&1")?;
+        let status =
+            config.execute("sudo systemctl is-active scalar-node 2>/dev/null || echo inactive")?;
+        Ok(status.stdout.trim().to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Stop the scalar-node service on a VPS.
+#[tauri::command]
+async fn stop_node(host: String, username: String, key_path: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        let config = SshConfig::new(&host, &username, &key_path);
+        config.execute("sudo systemctl stop scalar-node 2>&1")?;
+        let status =
+            config.execute("sudo systemctl is-active scalar-node 2>/dev/null || echo inactive")?;
+        Ok(status.stdout.trim().to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Fetch the last 100 lines of scalar-node service logs.
+#[tauri::command]
+async fn get_node_logs(host: String, username: String, key_path: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        let config = SshConfig::new(&host, &username, &key_path);
+        let result = config.execute(
+            "sudo journalctl -u scalar-node -n 100 --no-pager 2>/dev/null \
+             || echo 'Service not found or no logs available'",
+        )?;
+        Ok(result.stdout)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Reset a VPS: stop service, remove old install, rebuild from latest scalar-core.
+/// Streams output via the `manage_log` Tauri event.
+#[tauri::command]
+async fn reset_vps(
+    app: tauri::AppHandle,
+    host: String,
+    username: String,
+    key_path: String,
+) -> Result<String, String> {
+    let emit = |t: &str, msg: &str| {
+        app.emit("manage_log", serde_json::json!({"t": t, "msg": msg}))
+            .ok();
+    };
+
+    emit("cmd", &format!("→ Connecting to {}@{}…", username, host));
+    let config = SshConfig::new(&host, &username, &key_path);
+
+    let reset_script = r#"set -euo pipefail
+echo "=== [1/5] Stopping service..."
+sudo systemctl stop scalar-node 2>/dev/null || true
+sudo systemctl disable scalar-node 2>/dev/null || true
+sudo rm -f /etc/systemd/system/scalar-node.service
+sudo systemctl daemon-reload 2>/dev/null || true
+sudo rm -rf /etc/scalar
+echo "=== [2/5] Removing old installation..."
+rm -rf ~/scalar-core
+sudo rm -f /usr/local/bin/scalar-node
+echo "=== [3/5] System dependencies..."
+sudo apt-get update -qq
+sudo apt-get install -y build-essential pkg-config libssl-dev git curl
+echo "=== [4/5] Rust toolchain..."
+if command -v rustup &>/dev/null; then
+    rustup update stable --no-self-update
+    rustup default stable
+else
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+fi
+source "$HOME/.cargo/env"
+echo "    Rust: $(rustc --version)"
+echo "=== [5/5] Clone and build scalar-core..."
+cd ~
+git clone https://github.com/berdywandara/scalar-core.git
+cd scalar-core
+echo "    Commit: $(git log --oneline -1)"
+cargo build --release -p scalar-node
+echo "=== RESET COMPLETE. Ready for deployment. ==="
+"#;
+
+    emit("inf", "Starting VPS reset — this may take 5–10 minutes…");
+    emit("inf", "Do not close this application.");
+
+    let app_clone = app.clone();
+    let config_clone = config.clone();
+
+    let exit_code = tokio::task::spawn_blocking(move || {
+        config_clone.execute_streaming(reset_script, move |line| {
+            app_clone
+                .emit("manage_log", serde_json::json!({"t": "inf", "msg": line}))
+                .ok();
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+
+    if exit_code != 0 {
+        let msg = format!("Reset failed with exit code {}", exit_code);
+        emit("err", &msg);
+        return Err(msg);
+    }
+
+    emit("ok", "✅ VPS reset complete — ready for deployment");
+    Ok("Reset complete".to_string())
+}
+
 #[tauri::command]
 fn get_system_ram() -> serde_json::Value {
     let mut sys = System::new();
@@ -281,7 +415,12 @@ fn main() {
             load_setting,
             save_servers,
             load_servers,
-            pick_ssh_key
+            pick_ssh_key,
+            get_node_status,
+            start_node,
+            stop_node,
+            get_node_logs,
+            reset_vps
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
