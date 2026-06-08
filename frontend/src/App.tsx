@@ -19,7 +19,9 @@ interface Server {
 
 interface KgState {
   step: KgStep; mnemonic: string[]; revealed: boolean
-  word4: string; word4Err: string
+  word7: string; word7Err: string
+  word14: string; word14Err: string
+  word21: string; word21Err: string
   pass: string; passConfirm: string; passErr: string
   genesis: string; keystore: string; err: string
 }
@@ -117,7 +119,8 @@ export default function App() {
   const [copied,    setCopied]    = useState<Record<string, boolean>>({})
   const [kg, setKg] = useState<KgState>({
     step: 'idle', mnemonic: [], revealed: false,
-    word4: '', word4Err: '', pass: '', passConfirm: '',
+    word7: '', word7Err: '', word14: '', word14Err: '', word21: '', word21Err: '',
+    pass: '', passConfirm: '',
     passErr: '', genesis: '', keystore: '', err: '',
   })
   const [dp, setDp] = useState<DpState>({
@@ -283,11 +286,15 @@ export default function App() {
       setKg(p => ({ ...p, step: 'mnemonic', mnemonic, revealed: false, err: '' }))
     } catch (e) { setKg(p => ({ ...p, err: String(e) })) }
   }
-  const onCheckWord4 = () => {
-    if (kg.word4.trim().toLowerCase() === kg.mnemonic[3])
-      setKg(p => ({ ...p, step: 'passphrase', word4Err: '' }))
-    else
-      setKg(p => ({ ...p, word4Err: 'Incorrect. Check your written copy and try again.' }))
+  const onCheckWords = () => {
+    // Konfirmasi 3 kata: #7, #14, #21 — SCALAR-TECHNICAL §10.5
+    const ok7  = kg.word7.trim().toLowerCase()  === kg.mnemonic[6]
+    const ok14 = kg.word14.trim().toLowerCase() === kg.mnemonic[13]
+    const ok21 = kg.word21.trim().toLowerCase() === kg.mnemonic[20]
+    if (!ok7)  { setKg(p => ({ ...p, word7Err:  'Incorrect. Check your written copy.' })); return }
+    if (!ok14) { setKg(p => ({ ...p, word14Err: 'Incorrect. Check your written copy.' })); return }
+    if (!ok21) { setKg(p => ({ ...p, word21Err: 'Incorrect. Check your written copy.' })); return }
+    setKg(p => ({ ...p, step: 'passphrase', word7Err: '', word14Err: '', word21Err: '' }))
   }
   const onNextPass = () => {
     if (kg.pass.length < 8) { setKg(p => ({ ...p, passErr: 'Minimum 8 characters.' })); return }
@@ -299,7 +306,6 @@ export default function App() {
     try {
       const keystore: string = await invoke('encrypt_keystore_cmd', {
         mnemonic: kg.mnemonic, passphrase: kg.pass, genesisHash: kg.genesis,
-        useTierC: selTier === 'C',
       })
       setKg(p => ({ ...p, step: 'complete', keystore }))
       setDp(p => ({ ...p, keystore, genesis: kg.genesis, pass: kg.pass }))
@@ -590,20 +596,19 @@ export default function App() {
           <input type="radio" readOnly checked={selTier==='A'} onChange={() => onChangeTier('A')} />
           <div>
             <p className="radio-item__lbl">Tier A — Full Node</p>
-            <p className="radio-item__sub">4 GB RAM · ~60–90 menit setup · Akses penuh jaringan</p>
+            <p className="radio-item__sub">Dedicated hardware · NodeScore tinggi · NMT eligible</p>
           </div>
         </label>
         <label className="radio-item" onClick={() => onChangeTier('C')}>
           <input type="radio" readOnly checked={selTier==='C'} onChange={() => onChangeTier('C')} />
           <div>
             <p className="radio-item__lbl">Tier C — Terbatas</p>
-            <p className="radio-item__sub">16 MB RAM · ~5 menit setup · Akses terbatas</p>
+            <p className="radio-item__sub">Mobile / low-resource · NodeScore terbatas</p>
           </div>
         </label>
         <p className="settings-info">
-          {selTier==='A'
-            ? 'Node ID dibuat dengan parameter Tier A — mainnet-ready.'
-            : 'Tier C menghasilkan Node ID berbeda dari Tier A. Reward lebih kecil.'}
+          Tier menentukan NodeScore dan eligibilitas jaringan — bukan derivasi Node ID.
+          Node ID diturunkan dari mnemonic + genesis hash via BLAKE3.
         </p>
       </div>
 
@@ -707,22 +712,22 @@ export default function App() {
       <div className="card kg-card kg-gen">
         <div className="kg-ico"><IKey /></div>
         <h2 className="kg-h">Generate Node Keys</h2>
-        <p className="kg-sub">Create a 12-word mnemonic (121-bit entropy). Store in cold storage before proceeding.</p>
+        <p className="kg-sub">Create a 24-word mnemonic (253-bit entropy). Store in cold storage before proceeding.</p>
         <div className="warn-box" style={{ maxWidth: 400, textAlign: 'left' }}>
           ⚠ Your mnemonic is the <strong>only recovery path</strong>. Write it down first.
         </div>
         <div className="info-panel" style={{ width:'100%', maxWidth:400, textAlign:'left' }}>
           <div className="info-panel__item">
             <span className="info-panel__term">Node ID</span>
-            <span className="info-panel__desc">Identitas unik node kamu di jaringan Scalar, dibuat dari 12 kata kunci + genesis hash.</span>
+            <span className="info-panel__desc">Identitas unik node kamu di jaringan Scalar, dibuat dari 24 kata kunci + genesis hash via BLAKE3.</span>
           </div>
           <div className="info-panel__item">
             <span className="info-panel__term">Keystore</span>
             <span className="info-panel__desc">File terenkripsi 121 bytes yang menyimpan Node ID. Dikirim ke server via SSH untuk menjalankan node.</span>
           </div>
           <div className="info-panel__item">
-            <span className="info-panel__term">Tier saat ini</span>
-            <span className="info-panel__desc">{selTier === 'A' ? 'Tier A — Full Node (4 GB RAM, ~60-90 menit)' : 'Tier C — Terbatas (16 MB RAM, ~5 menit)'}</span>
+            <span className="info-panel__term">NodeID</span>
+            <span className="info-panel__desc">Diturunkan via BLAKE3 (&lt;1 ms). Keystore wallet via Argon2id 64 MB (~30 detik).</span>
           </div>
         </div>
         {kg.err && <div className="err-box" style={{ maxWidth: 400 }}>{kg.err}</div>}
@@ -739,10 +744,10 @@ export default function App() {
       <div className="card kg-card">
         <div className="mn-warn">
           <IAlert />
-          <span className="mn-warn-txt">Write all 12 words in order. Store offline. Do not photograph.</span>
+          <span className="mn-warn-txt">Write all 24 words in order. Store offline. Do not photograph.</span>
         </div>
         <div className="mn-hdr">
-          <span className="mn-hdr-t">MNEMONIC — 12 WORDS</span>
+          <span className="mn-hdr-t">MNEMONIC — 24 WORDS</span>
           <button className="btn btn-g btn-sm" onClick={() => setKg(p => ({ ...p, revealed: !p.revealed }))}>
             <IEye off={kg.revealed} />{kg.revealed ? 'Hide' : 'Reveal'}
           </button>
@@ -769,17 +774,35 @@ export default function App() {
           Verify your mnemonic
         </p>
         <p style={{ fontSize: 'var(--base)', color: 'var(--t2)', margin: 0 }}>
-          Enter <span className="cf-hint">word #4</span> to confirm it was recorded correctly.
+          Enter words <span className="cf-hint">#7</span>, <span className="cf-hint">#14</span>, and <span className="cf-hint">#21</span> to confirm they were recorded correctly.
         </p>
-        <div className="field" style={{ width: '100%', maxWidth: 280, textAlign: 'left' }}>
-          <label className="fld-lbl">Word #4</label>
-          <input className={`inp${kg.word4Err ? ' inp-err' : ''}`} type="text"
-            value={kg.word4} autoFocus placeholder="type word here…"
-            onChange={e => setKg(p => ({ ...p, word4: e.target.value, word4Err: '' }))}
-            onKeyDown={e => e.key === 'Enter' && onCheckWord4()} />
-          {kg.word4Err && <span className="fld-err">{kg.word4Err}</span>}
+        <div className="fstk" style={{ width: '100%', maxWidth: 280, textAlign: 'left' }}>
+          <div className="field">
+            <label className="fld-lbl">Word #7</label>
+            <input className={`inp${kg.word7Err ? ' inp-err' : ''}`} type="text"
+              value={kg.word7} autoFocus placeholder="type word here…"
+              onChange={e => setKg(p => ({ ...p, word7: e.target.value, word7Err: '' }))} />
+            {kg.word7Err && <span className="fld-err">{kg.word7Err}</span>}
+          </div>
+          <div className="field">
+            <label className="fld-lbl">Word #14</label>
+            <input className={`inp${kg.word14Err ? ' inp-err' : ''}`} type="text"
+              value={kg.word14} placeholder="type word here…"
+              onChange={e => setKg(p => ({ ...p, word14: e.target.value, word14Err: '' }))} />
+            {kg.word14Err && <span className="fld-err">{kg.word14Err}</span>}
+          </div>
+          <div className="field">
+            <label className="fld-lbl">Word #21</label>
+            <input className={`inp${kg.word21Err ? ' inp-err' : ''}`} type="text"
+              value={kg.word21} placeholder="type word here…"
+              onChange={e => setKg(p => ({ ...p, word21: e.target.value, word21Err: '' }))}
+              onKeyDown={e => e.key === 'Enter' && onCheckWords()} />
+            {kg.word21Err && <span className="fld-err">{kg.word21Err}</span>}
+          </div>
         </div>
-        <button className="btn btn-p" disabled={!kg.word4.trim()} onClick={onCheckWord4}>Confirm →</button>
+        <button className="btn btn-p"
+          disabled={!kg.word7.trim() || !kg.word14.trim() || !kg.word21.trim()}
+          onClick={onCheckWords}>Confirm →</button>
       </div>
     )
     case 'passphrase': return (
@@ -842,25 +865,13 @@ export default function App() {
     case 'deriving': return (
       <div className="card kg-card drv-step">
         <div className="drv-bars">{[1, 2, 3, 4, 5].map(n => <div key={n} className="drv-bar" />)}</div>
-        <p className="drv-lbl">Deriving keys via Argon2id…</p>
-        <p className="drv-sub">
-          {selTier === 'A' ? 'Tier A · 4 GB · 3.600 iter · ~60–90 menit' : 'Tier C · 16 MB · 100 iter · ~5 menit'}
-        </p>
-        <div className="prg-track">
-          <div className="prg-fill" style={{
-            width: `${Math.min(elapsed / TIER_A_SECS * 100, 99)}%`,
-            animation: elapsed > 5 ? 'none' : undefined
-          }} />
-        </div>
-        <div style={{ display:'flex', gap:'var(--s8)', fontSize:'var(--sm)', color:'var(--t3)' }}>
-          <span>Elapsed: <strong style={{ color:'var(--t2)', fontFamily:'var(--mono)' }}>{fmtTime(elapsed)}</strong></span>
-          <span>Remaining: <strong style={{ color:'var(--t2)', fontFamily:'var(--mono)' }}>{fmtTime(Math.max(TIER_A_SECS - elapsed, 0))}</strong></span>
-        </div>
+        <p className="drv-lbl">Deriving keys…</p>
+        <p className="drv-sub">NodeID via BLAKE3 + NodeKey via Argon2id 64 MB (~30 detik)</p>
         {ram && <p style={{ fontSize:'var(--xs)', color:'var(--t3)', margin:0 }}>
           RAM: <span style={{ fontFamily:'var(--mono)', color:'var(--t2)' }}>{(ram.available_mb/1024).toFixed(1)} GB tersedia</span>
         </p>}
         <div className="warn-box" style={{ maxWidth:400, fontSize:'var(--xs)' }}>
-          ⚠ Jangan tutup aplikasi ini. Argon2id sedang berjalan di background.
+          ⚠ Jangan tutup aplikasi ini.
         </div>
       </div>
     )
@@ -881,6 +892,7 @@ export default function App() {
           <button className="btn btn-s" onClick={() => setKg(p => ({
             ...p, step: 'idle', mnemonic: [], keystore: '',
             genesis: '', pass: '', passConfirm: '', err: '',
+            word7: '', word7Err: '', word14: '', word14Err: '', word21: '', word21Err: '',
           }))}>Start Over</button>
           <button className="btn btn-p" onClick={() => setAppView('deploy')}>Go to Deploy →</button>
         </div>

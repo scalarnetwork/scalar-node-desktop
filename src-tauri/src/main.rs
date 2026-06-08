@@ -1,30 +1,30 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod daemon;
-use sysinfo::System;
 use std::fs;
 use std::path::PathBuf;
-use tauri::Manager;
+use sysinfo::System;
 use tauri::Emitter;
+use tauri::Manager;
 mod gui;
 
+use base64::Engine;
 use daemon::keygen;
 use daemon::ssh::SshConfig;
-use base64::Engine;
 
-/// Generate a 12-word mnemonic.
+/// Generate a 24-word mnemonic. SCALAR-PROTOCOL §3.1.
 #[tauri::command]
 fn generate_mnemonic_cmd() -> Vec<String> {
     keygen::generate_mnemonic()
 }
 
 /// Encrypt keystore from mnemonic, genesis hash, and passphrase.
+/// NodeID derived via BLAKE3. SCALAR-PROTOCOL §3.1, SCALAR-TECHNICAL §10.5.
 #[tauri::command]
 async fn encrypt_keystore_cmd(
     mnemonic: Vec<String>,
     genesis_hash: String,
     passphrase: String,
-    use_tier_c: Option<bool>,
 ) -> Result<String, String> {
     if !keygen::validate_mnemonic(&mnemonic) {
         return Err("Invalid mnemonic".to_string());
@@ -35,8 +35,9 @@ async fn encrypt_keystore_cmd(
         .try_into()
         .map_err(|_| "Genesis hash must be 32 bytes".to_string())?;
 
-    let tier = if use_tier_c.unwrap_or(false) { &keygen::TIER_C } else { &keygen::TIER_A };
-    let node_id_full = keygen::derive_node_id_full(&mnemonic, &genesis_hash_bytes, tier)?;
+    // NodeID: BLAKE3(b"scalar_nodeid" || mnemonic || genesis_hash). SCALAR-PROTOCOL §3.1.
+    let mnemonic_str = mnemonic.join(" ");
+    let node_id_full = keygen::derive_node_id(&mnemonic_str, &genesis_hash_bytes);
     let node_key = keygen::derive_node_key(&mnemonic, &genesis_hash_bytes)?;
 
     let keystore = keygen::encrypt_keystore(&node_id_full, &node_key, &passphrase)?;
@@ -46,15 +47,22 @@ async fn encrypt_keystore_cmd(
 
 /// Test SSH connection to a VPS.
 #[tauri::command]
-async fn test_ssh_connection(host: String, username: String, key_path: String) -> Result<bool, String> {
+async fn test_ssh_connection(
+    host: String,
+    username: String,
+    key_path: String,
+) -> Result<bool, String> {
     tokio::task::spawn_blocking(move || {
         let config = SshConfig::new(&host, &username, &key_path);
         Ok::<bool, String>(config.test_connection())
-    }).await.map_err(|e| e.to_string())?
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// Deploy a node to a VPS.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 async fn deploy_node(
     app: tauri::AppHandle,
     host: String,
@@ -66,7 +74,8 @@ async fn deploy_node(
     dial_peers: Vec<String>,
 ) -> Result<String, String> {
     let emit = |t: &str, msg: &str| {
-        app.emit("deploy_log", serde_json::json!({"t": t, "msg": msg})).ok();
+        app.emit("deploy_log", serde_json::json!({"t": t, "msg": msg}))
+            .ok();
     };
 
     emit("cmd", &format!("→ Connecting to {}@{}…", username, host));
@@ -77,12 +86,14 @@ async fn deploy_node(
         .map_err(|e| format!("Failed to decode keystore: {}", e))?;
 
     emit("inf", "Uploading keystore to VPS…");
-    config.upload_bytes(&keystore_bytes, "/tmp/node_keystore.bin", 0o600)
+    config
+        .upload_bytes(&keystore_bytes, "/tmp/node_keystore.bin", 0o600)
         .map_err(|e| format!("Failed to upload keystore: {}", e))?;
     emit("ok", "Keystore uploaded ✓");
 
     emit("inf", "Uploading passphrase…");
-    config.upload_bytes(passphrase.as_bytes(), "/tmp/.scalar_pp_tmp", 0o600)
+    config
+        .upload_bytes(passphrase.as_bytes(), "/tmp/.scalar_pp_tmp", 0o600)
         .map_err(|e| format!("Failed to upload passphrase: {}", e))?;
     emit("ok", "Passphrase uploaded ✓");
 
@@ -92,12 +103,13 @@ async fn deploy_node(
         sudo chmod 600 /etc/scalar/.passphrase && \
         sudo mv /tmp/node_keystore.bin /etc/scalar/node_keystore.bin && \
         sudo chmod 600 /etc/scalar/node_keystore.bin";
-    config.execute(cmd_setup)
+    config
+        .execute(cmd_setup)
         .map_err(|e| format!("Failed to set up keystore on VPS: {}", e))?;
     emit("ok", "Keystore configured ✓");
 
     let exec_start_path = format!("/home/{}/scalar-core/target/release/scalar-node", username);
-    let dial_peers_str = dial_peers.join(",");
+    let _dial_peers_str = dial_peers.join(",");
 
     let deploy_script = format!(
         r#"#!/bin/bash
@@ -152,17 +164,24 @@ echo "=== DEPLOYMENT COMPLETE ==="
         exec_start_path = exec_start_path,
     );
 
-    emit("cmd", "Running deployment script — this may take 15–30 minutes…");
+    emit(
+        "cmd",
+        "Running deployment script — this may take 15–30 minutes…",
+    );
     emit("inf", "Do not close this application.");
 
     let config_clone = config.clone();
-    let app_clone    = app.clone();
+    let app_clone = app.clone();
 
     let exit_code = tokio::task::spawn_blocking(move || {
         config_clone.execute_streaming(&deploy_script, move |line| {
-            app_clone.emit("deploy_log", serde_json::json!({"t": "inf", "msg": line})).ok();
+            app_clone
+                .emit("deploy_log", serde_json::json!({"t": "inf", "msg": line}))
+                .ok();
         })
-    }).await.map_err(|e| e.to_string())??;
+    })
+    .await
+    .map_err(|e| e.to_string())??;
 
     if exit_code != 0 {
         let msg = format!("Deployment failed with exit code {}", exit_code);
@@ -178,7 +197,7 @@ echo "=== DEPLOYMENT COMPLETE ==="
 fn get_system_ram() -> serde_json::Value {
     let mut sys = System::new();
     sys.refresh_memory();
-    let total_mb     = sys.total_memory()     / 1024 / 1024;
+    let total_mb = sys.total_memory() / 1024 / 1024;
     let available_mb = sys.available_memory() / 1024 / 1024;
     serde_json::json!({
         "total_mb":     total_mb,
@@ -186,13 +205,13 @@ fn get_system_ram() -> serde_json::Value {
     })
 }
 
-
 // ── App data storage helpers ──────────────────────────────────────
 fn app_data_path(app: &tauri::AppHandle, filename: &str) -> Result<PathBuf, String> {
-    let dir = app.path().app_data_dir()
+    let dir = app
+        .path()
+        .app_data_dir()
         .map_err(|e| format!("app_data_dir error: {}", e))?;
-    fs::create_dir_all(&dir)
-        .map_err(|e| format!("create_dir error: {}", e))?;
+    fs::create_dir_all(&dir).map_err(|e| format!("create_dir error: {}", e))?;
     Ok(dir.join(filename))
 }
 
@@ -200,26 +219,26 @@ fn app_data_path(app: &tauri::AppHandle, filename: &str) -> Result<PathBuf, Stri
 fn save_setting(app: tauri::AppHandle, key: String, value: String) -> Result<(), String> {
     let path = app_data_path(&app, "settings.json")?;
     let mut settings: serde_json::Value = if path.exists() {
-        let content = fs::read_to_string(&path)
-            .map_err(|e| format!("read error: {}", e))?;
+        let content = fs::read_to_string(&path).map_err(|e| format!("read error: {}", e))?;
         serde_json::from_str(&content).unwrap_or(serde_json::json!({}))
     } else {
         serde_json::json!({})
     };
     settings[key] = serde_json::Value::String(value);
-    let out = serde_json::to_string_pretty(&settings)
-        .map_err(|e| format!("serialize error: {}", e))?;
+    let out =
+        serde_json::to_string_pretty(&settings).map_err(|e| format!("serialize error: {}", e))?;
     fs::write(&path, out).map_err(|e| format!("write error: {}", e))
 }
 
 #[tauri::command]
 fn load_setting(app: tauri::AppHandle, key: String) -> Result<Option<String>, String> {
     let path = app_data_path(&app, "settings.json")?;
-    if !path.exists() { return Ok(None); }
-    let content = fs::read_to_string(&path)
-        .map_err(|e| format!("read error: {}", e))?;
-    let settings: serde_json::Value = serde_json::from_str(&content)
-        .map_err(|e| format!("parse error: {}", e))?;
+    if !path.exists() {
+        return Ok(None);
+    }
+    let content = fs::read_to_string(&path).map_err(|e| format!("read error: {}", e))?;
+    let settings: serde_json::Value =
+        serde_json::from_str(&content).map_err(|e| format!("parse error: {}", e))?;
     Ok(settings[&key].as_str().map(|s| s.to_string()))
 }
 
@@ -232,10 +251,11 @@ fn save_servers(app: tauri::AppHandle, data: String) -> Result<(), String> {
 #[tauri::command]
 fn load_servers(app: tauri::AppHandle) -> Result<String, String> {
     let path = app_data_path(&app, "servers.json")?;
-    if !path.exists() { return Ok("[]".to_string()); }
+    if !path.exists() {
+        return Ok("[]".to_string());
+    }
     fs::read_to_string(&path).map_err(|e| format!("read error: {}", e))
 }
-
 
 #[tauri::command]
 async fn pick_ssh_key() -> Result<Option<String>, String> {
@@ -243,10 +263,11 @@ async fn pick_ssh_key() -> Result<Option<String>, String> {
         rfd::FileDialog::new()
             .set_title("Pilih SSH Private Key")
             .pick_file()
-    }).await.map_err(|e| e.to_string())?;
+    })
+    .await
+    .map_err(|e| e.to_string())?;
     Ok(result.map(|p| p.to_string_lossy().to_string()))
 }
-
 
 fn main() {
     tauri::Builder::default()
