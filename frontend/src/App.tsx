@@ -602,6 +602,20 @@ export default function App() {
           </a>
         </div>
       </div>
+
+      <hr className="settings-divider" />
+
+      <div className="settings-section">
+        <p className="settings-sec-lbl">Update Aplikasi</p>
+        <p className="settings-info">
+          Untuk menginstall versi terbaru, tutup aplikasi ini terlebih dahulu
+          sebelum menjalankan installer baru.
+        </p>
+        <button className="btn btn-s" style={{ marginTop:'var(--s8)' }}
+          onClick={async () => { try { await invoke('quit_app') } catch(_) {} }}>
+          Tutup Aplikasi
+        </button>
+      </div>
     </div>
   )
 

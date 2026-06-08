@@ -327,6 +327,12 @@ echo "=== RESET COMPLETE. Ready for deployment. ==="
     Ok("Reset complete".to_string())
 }
 
+/// Close the application completely. Use before installing a new version.
+#[tauri::command]
+fn quit_app(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
 #[tauri::command]
 fn get_system_ram() -> serde_json::Value {
     let mut sys = System::new();
@@ -416,6 +422,7 @@ fn main() {
             save_servers,
             load_servers,
             pick_ssh_key,
+            quit_app,
             get_node_status,
             start_node,
             stop_node,
