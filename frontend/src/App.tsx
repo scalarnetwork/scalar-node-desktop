@@ -119,8 +119,8 @@ export default function App() {
   const [appVersion, setAppVersion] = useState('—')
   const [servers,    setServers]    = useState<Server[]>([])
   const [selServer,  setSelServer]  = useState<Server | null>(null)
-  const [showSrvFrm, setShowSrvFrm] = useState(false)
   const [showDialog, setShowDialog] = useState(false)
+  const [showMgSrvFrm, setShowMgSrvFrm] = useState(false)
   const [srvForm,    setSrvForm]    = useState({ label:'', host:'', username:'ubuntu', keyPath:'' })
   const [selTier,    setSelTier]   = useState<SelTier>('A')
   const [copied,    setCopied]    = useState<Record<string, boolean>>({})
@@ -190,7 +190,6 @@ export default function App() {
     setSelServer(srv)
     setDp(p => ({ ...p, host: srv.host, user: srv.username, keyPath: srv.keyPath, connSt:'idle', connMsg:'' }))
     setSrvForm({ label:'', host:'', username:'ubuntu', keyPath:'' })
-    setShowSrvFrm(false)
   }
 
   const pickKeyFile = async () => {
@@ -431,7 +430,7 @@ export default function App() {
   // ── Deploy Section ───────────────────────────────────────────
   const renderDeploySection = () => {
     // State A — empty
-    if (servers.length === 0 && !showSrvFrm) return (
+    if (servers.length === 0) return (
       <div className="dp-empty">
         <svg className="dp-empty__ico" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/>
@@ -439,55 +438,11 @@ export default function App() {
         </svg>
         <p className="dp-empty__title">Belum ada server</p>
         <p className="dp-empty__sub">
-          Tambahkan server SSH pertama kamu untuk mulai deploy node.
+          Tambahkan server di tab Manage sebelum melakukan deployment.
         </p>
-        <button className="btn btn-p btn-sm" onClick={() => setShowSrvFrm(true)}>
-          + Tambah Server
+        <button className="btn btn-p btn-sm" onClick={() => setAppView('manage')}>
+          Ke Manage →
         </button>
-      </div>
-    )
-
-    // State B — add server form
-    if (showSrvFrm) return (
-      <div>
-        <p className="page-title-lg">Tambah Server</p>
-        <div className="srv-form">
-          <div className="field">
-            <label className="fld-lbl">Label</label>
-            <input className="inp" type="text" value={srvForm.label} placeholder="contoh: Oracle Frankfurt"
-              onChange={e => setSrvForm(p => ({...p, label:e.target.value}))} autoFocus />
-          </div>
-          <div className="field">
-            <label className="fld-lbl">IP Address / Host</label>
-            <input className="inp inp-mono" type="text" value={srvForm.host} placeholder="132.145.39.75"
-              onChange={e => setSrvForm(p => ({...p, host:e.target.value}))} />
-          </div>
-          <div className="field">
-            <label className="fld-lbl">Username</label>
-            <input className="inp" type="text" value={srvForm.username}
-              onChange={e => setSrvForm(p => ({...p, username:e.target.value}))} />
-          </div>
-          <div className="field">
-            <label className="fld-lbl">SSH Key Path</label>
-            <div className="inp-wrap">
-              <input className="inp inp-mono" type="text" value={srvForm.keyPath}
-                placeholder="C:\Users\HOPEX\.ssh\scalar-node.key"
-                onChange={e => setSrvForm(p => ({...p, keyPath:e.target.value}))} />
-              <button className="inp-ico" type="button" title="Browse file"
-                onClick={pickKeyFile}>
-                <IFolder />
-              </button>
-            </div>
-          </div>
-          <div className="srv-form-footer">
-            <button className="btn btn-s" onClick={() => setShowSrvFrm(false)}>Batal</button>
-            <button className="btn btn-p"
-              disabled={!srvForm.label.trim() || !srvForm.host.trim()}
-              onClick={addServer}>
-              Simpan Server
-            </button>
-          </div>
-        </div>
       </div>
     )
 
@@ -500,7 +455,6 @@ export default function App() {
           <div className="srv-section">
             <div className="srv-sec-hdr">
               <span className="srv-sec-lbl">Server</span>
-              <button className="btn btn-g btn-sm" onClick={() => setShowSrvFrm(true)}>+ Tambah</button>
             </div>
             <div className="srv-list">
               {servers.map(sv => (
@@ -659,6 +613,48 @@ export default function App() {
       mg.status === 'inactive' ? 'var(--wn-t)' :
       mg.status === 'failed'   ? 'var(--er-t)' : 'var(--t3)'
 
+    if (showMgSrvFrm) return (
+      <div>
+        <p className="page-title-lg">Tambah Server</p>
+        <div className="srv-form">
+          <div className="field">
+            <label className="fld-lbl">Label</label>
+            <input className="inp" type="text" value={srvForm.label} placeholder="contoh: scalar-node-1"
+              onChange={e => setSrvForm(p => ({...p, label:e.target.value}))} autoFocus />
+          </div>
+          <div className="field">
+            <label className="fld-lbl">IP Address / Host</label>
+            <input className="inp inp-mono" type="text" value={srvForm.host} placeholder="132.145.39.75"
+              onChange={e => setSrvForm(p => ({...p, host:e.target.value}))} />
+          </div>
+          <div className="field">
+            <label className="fld-lbl">Username</label>
+            <input className="inp" type="text" value={srvForm.username}
+              onChange={e => setSrvForm(p => ({...p, username:e.target.value}))} />
+          </div>
+          <div className="field">
+            <label className="fld-lbl">SSH Key Path</label>
+            <div className="inp-wrap">
+              <input className="inp inp-mono" type="text" value={srvForm.keyPath}
+                placeholder="C:\Users\HOPEX\.ssh\scalar-node.key"
+                onChange={e => setSrvForm(p => ({...p, keyPath:e.target.value}))} />
+              <button className="inp-ico" type="button" title="Browse file" onClick={pickKeyFile}>
+                <IFolder />
+              </button>
+            </div>
+          </div>
+          <div className="srv-form-footer">
+            <button className="btn btn-s" onClick={() => setShowMgSrvFrm(false)}>Batal</button>
+            <button className="btn btn-p"
+              disabled={!srvForm.label.trim() || !srvForm.host.trim()}
+              onClick={async () => { await addServer(); setShowMgSrvFrm(false) }}>
+              Simpan Server
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+
     if (servers.length === 0) return (
       <div className="dp-empty">
         <svg className="dp-empty__ico" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -666,8 +662,8 @@ export default function App() {
           <line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/>
         </svg>
         <p className="dp-empty__title">Belum ada server</p>
-        <p className="dp-empty__sub">Tambahkan server di tab Deploy terlebih dahulu.</p>
-        <button className="btn btn-p btn-sm" onClick={() => setAppView('deploy')}>Ke Deploy →</button>
+        <p className="dp-empty__sub">Tambahkan server VPS untuk mulai mengelola node.</p>
+        <button className="btn btn-p btn-sm" onClick={() => setShowMgSrvFrm(true)}>+ Tambah Server</button>
       </div>
     )
 
@@ -675,7 +671,10 @@ export default function App() {
       <div className="dp-main">
         <div className="dp-left">
           <div className="srv-section">
-            <div className="srv-sec-hdr"><span className="srv-sec-lbl">Server</span></div>
+            <div className="srv-sec-hdr">
+              <span className="srv-sec-lbl">Server</span>
+              <button className="btn btn-g btn-sm" onClick={() => setShowMgSrvFrm(true)}>+ Tambah</button>
+            </div>
             <div className="srv-list">
               {servers.map(sv => (
                 <div key={sv.id}
@@ -685,6 +684,13 @@ export default function App() {
                     <span className="srv-label">{sv.label}</span>
                     <span className="srv-ip">{sv.host}</span>
                   </div>
+                  <button className="srv-del" type="button"
+                    onClick={e => { e.stopPropagation(); deleteServer(sv.id) }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3 6 5 6 21 6"/>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                    </svg>
+                  </button>
                 </div>
               ))}
             </div>
@@ -705,16 +711,16 @@ export default function App() {
 
               <div className="c-row" style={{ marginBottom:'var(--s12)' }}>
                 <button className="btn btn-s btn-sm" disabled={isActing} onClick={onStartNode}>
-                  {mg.action==='starting' ? <><span className="btn-spinner btn-spinner--dark"/>Starting…</> : '▶ Start'}
+                  {mg.action==='starting' ? <><span className="btn-spinner btn-spinner--dark"/>Starting…</> : 'Start Node'}
                 </button>
                 <button className="btn btn-s btn-sm" disabled={isActing} onClick={onStopNode}>
-                  {mg.action==='stopping' ? <><span className="btn-spinner btn-spinner--dark"/>Stopping…</> : '■ Stop'}
+                  {mg.action==='stopping' ? <><span className="btn-spinner btn-spinner--dark"/>Stopping…</> : 'Stop Node'}
                 </button>
               </div>
 
               <button className="btn btn-s btn-full" style={{ marginBottom:'var(--s12)' }}
                 disabled={isActing} onClick={onGetLogs}>
-                {mg.action==='fetching_logs' ? <><span className="btn-spinner btn-spinner--dark"/>Fetching…</> : '📋 View Logs (last 100 lines)'}
+                {mg.action==='fetching_logs' ? <><span className="btn-spinner btn-spinner--dark"/>Fetching…</> : 'View Logs (last 100 lines)'}
               </button>
 
               <div style={{ borderTop:'1px solid var(--bdr)', paddingTop:'var(--s12)' }}>
@@ -726,7 +732,7 @@ export default function App() {
                     border:'1px solid var(--er-t)', borderRadius:'var(--r-sm)', padding:'var(--s8) var(--s12)'
                   }}
                   disabled={isActing} onClick={onResetVps}>
-                  {mg.action==='resetting' ? <><span className="btn-spinner"/>Resetting VPS…</> : '🔄 Reset & Rebuild VPS'}
+                  {mg.action==='resetting' ? <><span className="btn-spinner"/>Resetting VPS…</> : 'Reset & Rebuild VPS'}
                 </button>
               </div>
 
@@ -741,7 +747,7 @@ export default function App() {
               <>
                 <div className="lp-hdr">
                   <span className="lp-ttl">NODE LOGS</span>
-                  <button className="btn btn-g btn-sm" onClick={() => setMg(p => ({...p, logsVisible:false}))}>✕ Tutup</button>
+                  <button className="btn btn-g btn-sm" onClick={() => setMg(p => ({...p, logsVisible:false}))}>Tutup</button>
                 </div>
                 <div className="lp-body">
                   {mg.action === 'fetching_logs'
