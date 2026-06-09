@@ -228,8 +228,6 @@ a { color: inherit; text-decoration: none; }
   background: #FFFFFF15;
   color: var(--t1);
   font-weight: var(--fw6);
-  border-left: 2px solid var(--t1);
-  padding-left: calc(var(--s3) - 2px);
 }
 
 /* Sidebar bottom items */
@@ -1209,8 +1207,6 @@ select.inp option { background: var(--surf-03); color: var(--t1); }
   background: #FFFFFF15;
   color: var(--t1);
   font-weight: var(--fw6);
-  border-left: 2px solid var(--t1);
-  padding-left: calc(var(--s3) - 2px);
 }
 .info-content {
   flex: 1;
