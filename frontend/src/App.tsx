@@ -5,6 +5,7 @@ import { listen }  from "@tauri-apps/api/event"
 import { open }    from "@tauri-apps/plugin-shell"
 import "./App.css"
 import logoImg from "./assets/Logo4.png"
+import ErrorBoundary from "./ErrorBoundary"
 
 // ═══════════════════════════════════════════════════════════════
 // TYPES
@@ -282,7 +283,7 @@ export default function App() {
   // ── Init ──────────────────────────────────────────────────────
   useEffect(() => {
     invoke<string>('app_version').then(v => setAppVersion(v)).catch(() => {})
-    invoke<Server[]>('load_servers').then(s => { setServers(s||[]); if(s?.length) setSelServer(s[0]) }).catch(()=>{})
+    invoke<Server[]>('load_servers').then(s => { const list = Array.isArray(s) ? s : []; setServers(list); if(list.length) setSelServer(list[0]) }).catch(()=> setServers([]))
     invoke<RamInfo>('get_system_ram').then(r => setRam(r)).catch(()=>{})
     const id = setInterval(() => invoke<RamInfo>('get_system_ram').then(r => setRam(r)).catch(()=>{}), 10000)
     return () => clearInterval(id)
@@ -328,7 +329,7 @@ export default function App() {
   }
   const addServer = async () => {
     if (!srvForm.label.trim() || !srvForm.host.trim()) return
-    const srv: Server = { id: crypto.randomUUID(), ...srvForm }
+    const srv: Server = { id: (crypto?.randomUUID?.() ?? `srv-${Date.now()}-${Math.random().toString(36).slice(2)}`), ...srvForm }
     const list = [...servers, srv]
     await persistServers(list)
     setSelServer(srv)
@@ -1662,11 +1663,13 @@ export default function App() {
       <div className="app-body">
         {renderHeader()}
         <main className="content-area">
-          {appView === 'keygen'   && renderKg()}
+          <ErrorBoundary>
+            {appView === 'keygen'   && renderKg()}
           {appView === 'deploy'   && renderDeploy()}
           {appView === 'manage'   && renderManage()}
           {appView === 'info'     && renderInfo()}
           {appView === 'settings' && renderSettings()}
+          </ErrorBoundary>
         </main>
       </div>
       {renderToasts()}
