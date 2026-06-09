@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, Fragment } from "react"
 import React from "react";
 import { invoke }  from "@tauri-apps/api/core"
 import { listen }  from "@tauri-apps/api/event"
@@ -173,6 +173,61 @@ function useCopy(): [boolean, (text: string) => void] {
   }, [])
   return [copied, copy]
 }
+
+const StrengthBar = ({ pass }: { pass: string }) => {
+    const e = calcEntropy(pass)
+    const lvl = entropyLevel(e)
+    const segs = lvl==='weak'?1:lvl==='fair'?2:lvl==='good'?3:4
+    const col  = {weak:'#FF1744',fair:'#FFD600',good:'#00E676',strong:'#FFFFFF'}[lvl]
+    const lbl  = {weak:'WEAK',fair:'FAIR',good:'STRONG',strong:'VERY STRONG'}[lvl]
+    if (!pass) return null
+    return (
+      <div className="col gap-1">
+        <div style={{display:'flex',gap:4}}>
+          {[1,2,3,4].map(i => (
+            <div key={i} style={{flex:1,height:4,borderRadius:2,
+              background:i<=segs?col:'var(--surf-03)',transition:'background 0.2s'}}/>
+          ))}
+        </div>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          <span style={{fontSize:11,fontFamily:'var(--mono)',fontWeight:700,
+            color:col,textTransform:'uppercase',letterSpacing:'0.05em'}}>{lbl}</span>
+          <span style={{fontSize:11,color:'#71717A',fontFamily:'var(--mono)'}}>~{Math.round(e)} bits</span>
+        </div>
+        {lvl==='weak' && (
+          <div style={{background:'#FF174410',border:'1px solid #FF174430',
+            borderRadius:'var(--r-md)',padding:'var(--s3)',fontSize:12,color:'#FF1744'}}>
+            Your passphrase may be guessable. Consider adding more words.
+          </div>
+        )}
+      </div>
+    )
+  }
+
+const ResultCard = ({ title, sub, value, readonly, notice }:
+    { title:string; sub:string; value:string; readonly:boolean; notice?:string }) => {
+    const [copied, copy] = useCopy()
+    return (
+      <div className="result-card">
+        <div className="result-card__header">
+          <div>
+            <div className="result-card__title">{title}</div>
+            <div className="result-card__sub">{sub}</div>
+          </div>
+          <div className="row gap-2">
+            {readonly && <span className="readonly-badge">READ-ONLY</span>}
+            <button className={`copy-btn${copied?' copy-btn--ok':''}`} onClick={() => copy(value)}>
+              {copied ? <><ICheck/> Disalin</> : <><ICopy/> Salin</>}
+            </button>
+          </div>
+        </div>
+        <div className={`result-card__value${readonly?' result-card__value--readonly':''}`}>
+          {value.length > 80 ? value.substring(0,80)+'...' : value}
+        </div>
+        {notice && <p style={{fontSize:11,color:'#71717A',marginTop:'var(--s1)'}}>{notice}</p>}
+      </div>
+    )
+  }
 
 // ═══════════════════════════════════════════════════════════════
 // APP COMPONENT
@@ -466,7 +521,7 @@ export default function App() {
         ] as [AppView, string, React.ReactElement][]).map(([view, label, icon]) => (
           <button key={view}
             className={`nav-item${appView===view?' nav-item--active':''}`}
-            onClick={() => setAppView(view)}>
+            onClick={() => { setAppView(view); setShowAddSrv(false) }}>
             {icon}
             <span>{label}</span>
           </button>
@@ -522,46 +577,16 @@ export default function App() {
   const renderStepProgress = () => (
     <div className="step-progress">
       {[1,2,3,4,5,6,7].map((n, i) => (
-        <>
-          <div key={`pill-${n}`} className={`step-pill ${
+        <Fragment key={n}>
+          <div className={`step-pill ${
             i < stepIdx ? 'step-pill--done' :
             i === stepIdx ? 'step-pill--active' : 'step-pill--pending'
           }`}>{i < stepIdx ? <ICheck/> : n}</div>
-          {i < 6 && <div key={`line-${n}`} className={`step-line${i < stepIdx?' step-line--done':''}`}/>}
-        </>
+          {i < 6 && <div className={`step-line${i < stepIdx?' step-line--done':''}`}/>}
+        </Fragment>
       ))}
     </div>
   )
-
-  const StrengthBar = ({ pass }: { pass: string }) => {
-    const e = calcEntropy(pass)
-    const lvl = entropyLevel(e)
-    const segs = lvl==='weak'?1:lvl==='fair'?2:lvl==='good'?3:4
-    const col  = {weak:'#FF1744',fair:'#FFD600',good:'#00E676',strong:'#FFFFFF'}[lvl]
-    const lbl  = {weak:'WEAK',fair:'FAIR',good:'STRONG',strong:'VERY STRONG'}[lvl]
-    if (!pass) return null
-    return (
-      <div className="col gap-1">
-        <div style={{display:'flex',gap:4}}>
-          {[1,2,3,4].map(i => (
-            <div key={i} style={{flex:1,height:4,borderRadius:2,
-              background:i<=segs?col:'var(--surf-03)',transition:'background 0.2s'}}/>
-          ))}
-        </div>
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-          <span style={{fontSize:11,fontFamily:'var(--mono)',fontWeight:700,
-            color:col,textTransform:'uppercase',letterSpacing:'0.05em'}}>{lbl}</span>
-          <span style={{fontSize:11,color:'#71717A',fontFamily:'var(--mono)'}}>~{Math.round(e)} bits</span>
-        </div>
-        {lvl==='weak' && (
-          <div style={{background:'#FF174410',border:'1px solid #FF174430',
-            borderRadius:'var(--r-md)',padding:'var(--s3)',fontSize:12,color:'#FF1744'}}>
-            Your passphrase may be guessable. Consider adding more words.
-          </div>
-        )}
-      </div>
-    )
-  }
 
   const renderKg = () => {
     switch(kg.step) {
@@ -901,31 +926,6 @@ export default function App() {
 
       default: return null
     }
-  }
-
-  const ResultCard = ({ title, sub, value, readonly, notice }:
-    { title:string; sub:string; value:string; readonly:boolean; notice?:string }) => {
-    const [copied, copy] = useCopy()
-    return (
-      <div className="result-card">
-        <div className="result-card__header">
-          <div>
-            <div className="result-card__title">{title}</div>
-            <div className="result-card__sub">{sub}</div>
-          </div>
-          <div className="row gap-2">
-            {readonly && <span className="readonly-badge">READ-ONLY</span>}
-            <button className={`copy-btn${copied?' copy-btn--ok':''}`} onClick={() => copy(value)}>
-              {copied ? <><ICheck/> Disalin</> : <><ICopy/> Salin</>}
-            </button>
-          </div>
-        </div>
-        <div className={`result-card__value${readonly?' result-card__value--readonly':''}`}>
-          {value.length > 80 ? value.substring(0,80)+'...' : value}
-        </div>
-        {notice && <p style={{fontSize:11,color:'#71717A',marginTop:'var(--s1)'}}>{notice}</p>}
-      </div>
-    )
   }
 
   // ═══════════════════════════════════════════════════════════════
