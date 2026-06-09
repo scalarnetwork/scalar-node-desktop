@@ -399,7 +399,7 @@ export default function App() {
     } catch(e) {
       setDerivPhase(0)
       setKg(p => ({...p, step:'genesis', err: String(e)}))
-      toast('error', 'Derivasi gagal: ' + String(e))
+      toast('error', 'Derivation failed: ' + String(e))
     }
   }
   const resetKeygen = () => {
@@ -441,7 +441,7 @@ export default function App() {
       toast('success', `Node deployed to ${selServer.label}`)
     } catch(e) {
       setDp(p => ({...p, deplSt:'error'}))
-      toast('error', 'Deploy gagal: ' + String(e))
+      toast('error', 'Deploy failed: ' + String(e))
     }
   }
 
@@ -499,7 +499,7 @@ export default function App() {
       })
       setMg(p => ({...p, action:'idle'}))
       toast('success', 'VPS reset complete')
-    } catch(e) { setMg(p => ({...p, action:'idle', err:String(e)})); toast('error', 'Reset gagal: '+String(e)) }
+    } catch(e) { setMg(p => ({...p, action:'idle', err:String(e)})); toast('error', 'Reset failed: '+String(e)) }
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -980,7 +980,7 @@ export default function App() {
               </div>
             </div>
             <div className="server-card__edit-footer">
-              <button className="btn btn-ghost btn-sm" onClick={() => setEditSvId(null)}>Batal</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setEditSvId(null)}>Cancel</button>
               <button className="btn btn-primary btn-sm"
                 disabled={!editForm.label.trim()||!editForm.host.trim()}
                 onClick={updateServer}>Simpan</button>
@@ -1001,7 +1001,7 @@ export default function App() {
             </button>
             <button className="icon-btn icon-btn--danger" title="Hapus"
               onClick={e => { e.stopPropagation(); setModal({
-                title:'Hapus Server?',
+                title:'Delete Server?',
                 body:`Server "${sv.label}" will be removed. This action cannot be undone.`,
                 onConfirm: () => deleteServer(sv.id)
               }) }}>
@@ -1424,16 +1424,16 @@ export default function App() {
   // RENDER: INFO TAB
   // ═══════════════════════════════════════════════════════════════
   const INFO_TOPICS = [
-    { title:'Mnemonic',        icon:'🔑' },
-    { title:'Node ID',         icon:'🆔' },
-    { title:'Keystore',        icon:'🔒' },
-    { title:'Passphrase',      icon:'🔐' },
-    { title:'Genesis Hash',    icon:'#️⃣' },
-    { title:'NodeScore',       icon:'📊' },
-    { title:'Complete Flow',   icon:'🗺️' },
+    { title:'Mnemonic' },
+    { title:'Node ID' },
+    { title:'Keystore' },
+    { title:'Passphrase' },
+    { title:'Genesis Hash' },
+    { title:'NodeScore' },
+    { title:'Complete Flow' },
   ]
-  const INFO_CONTENT: Record<number, { icon: string; title: string; body: React.ReactElement }> = {
-    0: { icon:'🔑', title:'Mnemonic', body: (
+  const INFO_CONTENT: Record<number, { title: string; body: React.ReactElement }> = {
+    0: { title:'Mnemonic', body: (
       <div className="info-content__body">
         <p>Your mnemonic is 24 words that serve as the master key for your node and wallet. The first word is always <span className="info-mono">scalar</span>, followed by 23 random BIP-39 words (253-bit entropy).</p>
         <div className="info-content__callout">
@@ -1443,7 +1443,7 @@ export default function App() {
         <p>The 253-bit entropy provides 126.5-bit protection against quantum computers, exceeding the 128-bit threshold.</p>
       </div>
     )},
-    1: { icon:'🆔', title:'Node ID', body: (
+    1: { title:'Node ID', body: (
       <div className="info-content__body">
         <p>The Node ID is your node's unique identity on the Scalar network, represented as a 64-character hex string.</p>
         <div className="info-content__callout">
@@ -1453,7 +1453,7 @@ export default function App() {
         <p>One mnemonic produces exactly one Node ID. To run multiple nodes, use separate mnemonics for each.</p>
       </div>
     )},
-    2: { icon:'🔒', title:'Keystore', body: (
+    2: { title:'Keystore', body: (
       <div className="info-content__body">
         <p>The keystore is an encrypted 121-byte file that stores your Node ID and Node Key. This file is sent to the VPS to run the node.</p>
         <div className="info-content__callout">
@@ -1462,7 +1462,7 @@ export default function App() {
         <p>Format: <span className="info-mono">version(1) + kdf_salt(16) + nonce(24) + ciphertext(80)</span> = 121 bytes total. Encrypted using Argon2id 64MB + XChaCha20-Poly1305.</p>
       </div>
     )},
-    3: { icon:'🔐', title:'Passphrase', body: (
+    3: { title:'Passphrase', body: (
       <div className="info-content__body">
         <p>The passphrase protects the keystore on disk. Required every time the node starts to decrypt the keystore. Minimum 8 characters.</p>
         <div className="info-content__callout callout--warn">
@@ -1471,7 +1471,7 @@ export default function App() {
         <p>Passphrase strength is critical. A birthdate (e.g. 01011990) has ~13 bits of entropy and can be guessed in minutes even with Argon2id protection. Use a random passphrase of at least 12 characters.</p>
       </div>
     )},
-    4: { icon:'#️⃣', title:'Genesis Hash', body: (
+    4: { title:'Genesis Hash', body: (
       <div className="info-content__body">
         <p>The genesis hash is the 64-character hex of the Scalar network's genesis block. It binds your Node ID to a specific network.</p>
         <div className="info-content__callout">
@@ -1480,7 +1480,7 @@ export default function App() {
         <p>Get the official genesis hash at <strong>scalar.network/genesis</strong>. Do not use unverified values.</p>
       </div>
     )},
-    5: { icon:'📊', title:'NodeScore', body: (
+    5: { title:'NodeScore', body: (
       <div className="info-content__body">
         <p>NodeScore is a node performance score (0–1,000,000) determined by three factors: uptime, root alignment, and longevity.</p>
         <div className="info-content__callout">
@@ -1489,7 +1489,7 @@ export default function App() {
         <p>NodeScore increases as the node runs consistently over time. Frequent restarts or downtime will significantly reduce the score through the longevity component.</p>
       </div>
     )},
-    6: { icon:'🗺️', title:'Complete Usage Flow', body: (
+    6: { title:'Complete Usage Flow', body: (
       <div className="info-content__body">
         <p>Three main steps to run a Scalar node:</p>
         <div className="flow-diagram">
@@ -1646,8 +1646,8 @@ export default function App() {
         <h3 className="modal__title">{modal.title}</h3>
         <p className="modal__body">{modal.body}</p>
         <div className="modal__footer">
-          <button className="btn btn-ghost" onClick={() => setModal(null)}>Batal</button>
-          <button className="btn btn-danger" onClick={() => { modal.onConfirm(); setModal(null) }}>Konfirmasi</button>
+          <button className="btn btn-ghost" onClick={() => setModal(null)}>Cancel</button>
+          <button className="btn btn-danger" onClick={() => { modal.onConfirm(); setModal(null) }}>Confirm</button>
         </div>
       </div>
     </div>
