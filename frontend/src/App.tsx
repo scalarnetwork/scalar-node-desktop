@@ -36,6 +36,7 @@ interface KgState {
   genesis:   string
   result:    KeygenResult | null
   err:       string
+  isRestore: boolean
 }
 
 interface DpState {
@@ -160,8 +161,6 @@ function entropyLevel(e: number): 'weak'|'fair'|'good'|'strong' {
   if (e < 60) return 'good'
   return 'strong'
 }
-function entropyPct(e: number): number { return Math.min((e / 80) * 100, 100) }
-const ENTROPY_LABELS = { weak:'Weak', fair:'Fair', good:'Strong', strong:'Very Strong' }
 
 async function copyText(text: string): Promise<void> {
   try { await navigator.clipboard.writeText(text) } catch(_) {}
@@ -200,9 +199,10 @@ export default function App() {
     step:'idle', mnemonic:[], revealed:false,
     word7:'', word7Err:'', word14:'', word14Err:'', word21:'', word21Err:'',
     pass:'', passConfirm:'', passErr:'',
-    genesis:'', result:null, err:''
+    genesis:'', result:null, err:'', isRestore:false
   })
   const [showPass, setShowPass] = useState(false)
+  const [derivPhase, setDerivPhase] = useState<0|1|2|3>(0)
   const [ram, setRam] = useState<RamInfo|null>(null)
 
   // ── Deploy state ──────────────────────────────────────────────
@@ -330,6 +330,8 @@ export default function App() {
   }
   const onDeriveKeys = async () => {
     setKg(p => ({...p, step:'deriving', err:''}))
+    setDerivPhase(0)
+    setTimeout(() => setDerivPhase(1), 300)
     try {
       const result = await invoke<KeygenResult>('encrypt_keystore_cmd', {
         mnemonic: kg.mnemonic, passphrase: kg.pass, genesisHash: kg.genesis,
@@ -339,6 +341,7 @@ export default function App() {
       setDp(p => ({...p, keystore: result.keystore_b64, genesis: kg.genesis}))
       toast('success', 'Node identity created successfully')
     } catch(e) {
+      setDerivPhase(0)
       setKg(p => ({...p, step:'genesis', err: String(e)}))
       toast('error', 'Derivasi gagal: ' + String(e))
     }
@@ -347,9 +350,10 @@ export default function App() {
     setKg({
       step:'idle', mnemonic:[], revealed:false,
       word7:'', word7Err:'', word14:'', word14Err:'', word21:'', word21Err:'',
-      pass:'', passConfirm:'', passErr:'', genesis:'', result:null, err:''
+      pass:'', passConfirm:'', passErr:'', genesis:'', result:null, err:'', isRestore:false
     })
     setShowPass(false)
+  setDerivPhase(0)
   }
 
   // ── Deploy handlers ───────────────────────────────────────────
@@ -540,19 +544,32 @@ export default function App() {
     </div>
   )
 
-  const EntropyBar = ({ pass }: { pass: string }) => {
+  const StrengthBar = ({ pass }: { pass: string }) => {
     const e = calcEntropy(pass)
     const lvl = entropyLevel(e)
-    const pct = entropyPct(e)
+    const segs = lvl==='weak'?1:lvl==='fair'?2:lvl==='good'?3:4
+    const col  = {weak:'#FF1744',fair:'#FFD600',good:'#00E676',strong:'#FFFFFF'}[lvl]
+    const lbl  = {weak:'WEAK',fair:'FAIR',good:'STRONG',strong:'VERY STRONG'}[lvl]
+    if (!pass) return null
     return (
-      <div className="entropy-bar">
-        <div className="entropy-track">
-          <div className={`entropy-fill entropy-fill--${lvl}`} style={{width:`${pct}%`}}/>
+      <div className="col gap-1">
+        <div style={{display:'flex',gap:4}}>
+          {[1,2,3,4].map(i => (
+            <div key={i} style={{flex:1,height:4,borderRadius:2,
+              background:i<=segs?col:'var(--surf-03)',transition:'background 0.2s'}}/>
+          ))}
         </div>
-        {pass && <span className={`entropy-label entropy-label--${lvl} t-caption`}>
-          {ENTROPY_LABELS[lvl]} — ~{Math.round(e)} bit entropy
-          {lvl === 'weak' && ' ⚠ Sangat mudah ditebak'}
-        </span>}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          <span style={{fontSize:11,fontFamily:'var(--mono)',fontWeight:700,
+            color:col,textTransform:'uppercase',letterSpacing:'0.05em'}}>{lbl}</span>
+          <span style={{fontSize:11,color:'#71717A',fontFamily:'var(--mono)'}}>~{Math.round(e)} bits</span>
+        </div>
+        {lvl==='weak' && (
+          <div style={{background:'#FF174410',border:'1px solid #FF174430',
+            borderRadius:'var(--r-md)',padding:'var(--s3)',fontSize:12,color:'#FF1744'}}>
+            Your passphrase may be guessable. Consider adding more words.
+          </div>
+        )}
       </div>
     )
   }
@@ -564,222 +581,293 @@ export default function App() {
         <div className="kg-wrap">
           <div>
             <h1 className="t-display mb-3">Create Node Identity</h1>
-            <p className="t-sub">Your mnemonic is the master key for your node and wallet. Save it offline before continuing.</p>
+            <p className="t-sub">Your mnemonic is the master key for your node and wallet.</p>
           </div>
-          <div className="card card--warn">
-            <div className="row gap-2">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color:'#FFD600',flexShrink:0}}>
-                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          <div style={{background:'#18181B',border:'1px solid #27272A',borderRadius:8,
+            padding:'var(--s4)',display:'flex',alignItems:'flex-start',gap:'var(--s3)'}}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFD600"
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0,marginTop:2}}>
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <span className="t-sub">This mnemonic will <strong style={{color:'#FFD600'}}>NEVER</strong> be stored by this application. Write it down and store offline.</span>
+          </div>
+          <div style={{display:'flex',gap:'var(--s4)'}}>
+            <div className="card" style={{flex:1,display:'flex',flexDirection:'column',gap:'var(--s3)',cursor:'pointer'}}
+              onClick={onGenerateMnemonic}>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white"
+                strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
               </svg>
-              <p className="t-sub">This application will <strong style={{color:'#FFD600'}}>NEVER</strong> store your mnemonic. Write all 24 words on physical paper.</p>
+              <h3 className="t-section">Generate New Mnemonic</h3>
+              <p className="t-sub" style={{flex:1}}>Create a brand-new node identity</p>
+              <button className="btn btn-primary btn-full"
+                onClick={ev=>{ev.stopPropagation();onGenerateMnemonic()}}>Generate New</button>
             </div>
-          </div>
-          <div className="col gap-4 mt-4">
-            <button className="btn btn-primary btn-lg" onClick={onGenerateMnemonic}>
-              Generate New Mnemonic
-            </button>
-            <button className="btn btn-ghost" onClick={() => setKg(p=>({...p,step:'mnemonic',mnemonic:[]}))} style={{opacity:0.7}}>
-              Restore from Cold Storage
-            </button>
+            <div className="card" style={{flex:1,display:'flex',flexDirection:'column',gap:'var(--s3)',cursor:'pointer'}}
+              onClick={()=>setKg(p=>({...p,step:'mnemonic',mnemonic:[],isRestore:true}))}>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white"
+                strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              <h3 className="t-section">Restore from Cold Storage</h3>
+              <p className="t-sub" style={{flex:1}}>I already have 24 mnemonic words</p>
+              <button className="btn btn-ghost btn-full">Restore Existing</button>
+            </div>
           </div>
         </div>
       )
-
       case 'mnemonic': return (
         <div className="kg-wrap">
           {renderStepProgress()}
           <div>
-            <h2 className="t-section mb-3" style={{fontSize:20}}>
-              {kg.mnemonic.length > 0 ? 'MNEMONIC — 24 WORDS' : 'Enter Mnemonic'}
-            </h2>
-            {kg.mnemonic.length > 0 ? (
+            {kg.mnemonic.length>0 ? (
               <>
-                <div className="card card--warn mb-3">
-                  <p style={{fontSize:12,color:'#FFD600'}}>
-                    Write all 24 words in order. Store offline. Do not photograph.
-                  </p>
+                <h1 className="t-display mb-3">Secure Your Mnemonic</h1>
+                <div style={{background:'#FFD60010',border:'1px solid #FFD60030',borderRadius:'var(--r-lg)',
+                  padding:'var(--s3) var(--s4)',display:'flex',alignItems:'center',gap:'var(--s3)',marginBottom:'var(--s4)'}}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFD600" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}>
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                  </svg>
+                  <span style={{fontSize:12,color:'#FFD600'}}>Write all 24 words in order. Never photograph or paste online.</span>
                 </div>
-                <div className="mn-grid">
-                  {kg.mnemonic.map((w, i) => (
-                    <div key={i} className="mn-word">
-                      <span className="mn-num">{i+1}</span>
-                      <span className={`mn-txt${kg.revealed?'':' mn-txt--blur'}`}>{w}</span>
+                <div style={{display:'flex',justifyContent:'center',marginBottom:'var(--s4)'}}>
+                  <button className="btn btn-ghost btn-sm" onClick={()=>setKg(p=>({...p,revealed:!p.revealed}))}>
+                    <IEye off={kg.revealed}/> {kg.revealed?'Hide Mnemonic':'Reveal Mnemonic'}
+                  </button>
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'var(--s2)',marginBottom:'var(--s4)'}}>
+                  {kg.mnemonic.map((w,i)=>(
+                    <div key={i} style={{background:'var(--surf-03)',border:'1px solid var(--bdr-subtle)',
+                      borderRadius:'var(--r-md)',padding:'var(--s2) var(--s3)',display:'flex',alignItems:'center',gap:'var(--s2)'}}>
+                      <span style={{fontSize:10,fontFamily:'var(--mono)',color:'#52525B',minWidth:18}}>{i+1}</span>
+                      <span style={{fontFamily:'var(--mono)',fontSize:12,color:'var(--t1)',
+                        filter:kg.revealed?'none':'blur(6px)',userSelect:kg.revealed?'text':'none',
+                        transition:'filter 0.2s'}}>{w}</span>
                     </div>
                   ))}
                 </div>
-                <div className="row gap-2 mt-4">
-                  <button className="btn btn-ghost btn-sm" onClick={() => setKg(p=>({...p,revealed:!p.revealed}))}>
-                    <IEye off={kg.revealed}/> {kg.revealed?'Hide':'Reveal'}
-                  </button>
-                  <button className="btn btn-ghost btn-sm" onClick={() => copyText(kg.mnemonic.join(' '))}>
-                    <ICopy/> Copy
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                  <button className="btn btn-ghost btn-sm" onClick={()=>{
+                    copyText(kg.mnemonic.join(' '))
+                    toast('warning','Copied — Keep this off digital storage')
+                  }}><ICopy/> Copy to Clipboard</button>
+                  <button className="btn btn-primary" disabled={!kg.revealed}
+                    onClick={()=>setKg(p=>({...p,step:'confirm'}))}>
+                    Next: Confirm Mnemonic →
                   </button>
                 </div>
-                <div className="mt-5">
-                  <button className="btn btn-primary btn-full"
-                    disabled={!kg.revealed}
-                    onClick={() => setKg(p=>({...p,step:'confirm'}))}>
-                    Saya Sudah Catat — Lanjutkan →
-                  </button>
-                  {!kg.revealed && <p className="t-caption mt-2" style={{textAlign:'center',color:'#71717A'}}>
-                    Reveal your mnemonic first before continuing
-                  </p>}
+                {!kg.revealed&&<p className="fld-hint mt-2" style={{textAlign:'right'}}>
+                  Reveal your mnemonic first before continuing
+                </p>}
+              </>
+            ):(
+              <>
+                <h1 className="t-display mb-3">Restore from Cold Storage</h1>
+                <p className="t-sub mb-4">Enter your 24-word mnemonic (separated by spaces or newlines):</p>
+                <div className="col gap-4">
+                  <textarea className="inp ta inp-mono" rows={6}
+                    placeholder="scalar abandon ability able about above absent absorb..."
+                    onChange={e=>{const w=e.target.value.trim().split(/\s+/).filter(Boolean);if(w.length>0)setKg(p=>({...p,mnemonic:w}))}}/>
+                  {kg.mnemonic.length>0&&kg.mnemonic.length!==24&&
+                    <p className="fld-err">Mnemonic must be exactly 24 words (currently {kg.mnemonic.length})</p>
+                  }
+                  <div style={{display:'flex',justifyContent:'space-between'}}>
+                    <button className="btn btn-ghost" onClick={()=>setKg(p=>({...p,step:'idle',mnemonic:[],isRestore:false}))}>← Back</button>
+                    <button className="btn btn-primary" disabled={kg.mnemonic.length!==24}
+                      onClick={()=>setKg(p=>({...p,step:'passphrase'}))}>Continue →</button>
+                  </div>
                 </div>
               </>
-            ) : (
-              /* Restore flow */
-              <div className="col gap-4">
-                <p className="t-sub">Enter your 24-word mnemonic (separated by spaces or newlines):</p>
-                <textarea className="inp ta inp-mono" rows={6}
-                  placeholder="scalar abandon ability able about above absent absorb..."
-                  onChange={e => {
-                    const words = e.target.value.trim().split(/\s+/).filter(Boolean)
-                    if (words.length > 0) setKg(p => ({...p, mnemonic: words}))
-                  }}/>
-                <button className="btn btn-primary btn-full"
-                  disabled={kg.mnemonic.length !== 24}
-                  onClick={() => setKg(p=>({...p,step:'confirm'}))}>
-                  Continue with This Mnemonic →
-                </button>
-                {kg.mnemonic.length > 0 && kg.mnemonic.length !== 24 &&
-                  <p className="fld-err">Mnemonic must be exactly 24 words (currently {kg.mnemonic.length})</p>
-                }
-              </div>
             )}
           </div>
         </div>
       )
-
       case 'confirm': return (
         <div className="kg-wrap">
           {renderStepProgress()}
           <div>
-            <h2 className="t-section mb-3" style={{fontSize:20}}>Verify Mnemonic</h2>
-            <p className="t-sub mb-4">Enter words <strong style={{color:'#fff'}}>#7</strong>, <strong style={{color:'#fff'}}>#14</strong>, and <strong style={{color:'#fff'}}>#21</strong> to confirm you have written them down.</p>
+            <h1 className="t-display mb-3">Confirm Your Backup</h1>
+            <p className="t-sub mb-5">Enter the words at positions <strong style={{color:'#fff'}}>7</strong>, <strong style={{color:'#fff'}}>14</strong>, and <strong style={{color:'#fff'}}>21</strong></p>
             <div className="col gap-4" style={{maxWidth:360}}>
               {([
-                {n:7,  k:'word7'  as const, err:'word7Err'  as const},
-                {n:14, k:'word14' as const, err:'word14Err' as const},
-                {n:21, k:'word21' as const, err:'word21Err' as const},
-              ]).map(({n,k,err}) => (
+                {n:7,k:'word7' as const,err:'word7Err' as const},
+                {n:14,k:'word14' as const,err:'word14Err' as const},
+                {n:21,k:'word21' as const,err:'word21Err' as const},
+              ]).map(({n,k,err})=>(
                 <div key={n} className="field">
                   <label className="fld-lbl">Word #{n}</label>
-                  <input className={`inp inp-mono${kg[err]?' inp-err':''}`} type="text"
-                    value={kg[k]} placeholder="type word here..."
-                    autoFocus={n===7}
-                    onChange={e => setKg(p => ({...p, [k]:e.target.value, [err]:''}))}
-                    onKeyDown={e => e.key==='Enter' && n===21 && onConfirmWords()}/>
-                  {kg[err] && <span className="fld-err">{kg[err]}</span>}
+                  <div style={{position:'relative'}}>
+                    <input className={`inp inp-mono${kg[err]?' inp-err':''}`} type="text"
+                      value={kg[k]} placeholder="Enter word..."
+                      autoFocus={n===7}
+                      onChange={e=>setKg(p=>({...p,[k]:e.target.value,[err]:''}))}  
+                      onKeyDown={e=>e.key==='Enter'&&n===21&&onConfirmWords()}
+                      style={{paddingRight:36}}/>
+                    {kg[k]&&!kg[err]&&(
+                      <span style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',color:'#00E676'}}><ICheck/></span>
+                    )}
+                    {kg[err]&&(
+                      <span style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',color:'#FF1744',fontSize:14}}>✗</span>
+                    )}
+                  </div>
+                  {kg[err]&&<span className="fld-err">Incorrect. Check your written backup.</span>}
                 </div>
               ))}
-              <button className="btn btn-primary btn-full mt-2"
-                disabled={!kg.word7.trim()||!kg.word14.trim()||!kg.word21.trim()}
-                onClick={onConfirmWords}>
-                Confirm →
-              </button>
+              <div style={{display:'flex',justifyContent:'space-between',marginTop:'var(--s2)'}}>
+                <button className="btn btn-ghost"
+                  onClick={()=>setKg(p=>({...p,step:'mnemonic',word7:'',word14:'',word21:'',word7Err:'',word14Err:'',word21Err:''}))}>← Back</button>
+                <button className="btn btn-primary"
+                  disabled={!kg.word7.trim()||!kg.word14.trim()||!kg.word21.trim()}
+                  onClick={onConfirmWords}>Continue →</button>
+              </div>
             </div>
           </div>
         </div>
       )
-
       case 'passphrase': return (
         <div className="kg-wrap">
           {renderStepProgress()}
           <div>
-            <h2 className="t-section mb-3" style={{fontSize:20}}>Set Passphrase</h2>
-            <p className="t-sub mb-4">The passphrase protects your keystore. Minimum 8 characters. Cannot be recovered — store alongside your mnemonic.</p>
-            <div className="col gap-4" style={{maxWidth:360}}>
+            <h1 className="t-display mb-3">Create Passphrase</h1>
+            <p className="t-sub mb-5">Encrypts your keystore. Required every time the node starts.</p>
+            <div className="col gap-4" style={{maxWidth:380}}>
               <div className="field">
                 <label className="fld-lbl">Passphrase</label>
                 <div className="inp-wrap">
-                  <input className="inp" type={showPass?'text':'password'} value={kg.pass}
+                  <input className="inp inp-mono" type={showPass?'text':'password'} value={kg.pass}
                     placeholder="Create a strong passphrase..."
-                    onChange={e => setKg(p => ({...p, pass:e.target.value, passErr:''}))}
-                    autoFocus/>
-                  <button className="inp-ico" onClick={() => setShowPass(v=>!v)}><IEye off={showPass}/></button>
+                    onChange={e=>setKg(p=>({...p,pass:e.target.value,passErr:''}))} autoFocus/>
+                  <button className="inp-ico" onClick={()=>setShowPass(v=>!v)}><IEye off={showPass}/></button>
                 </div>
-                <EntropyBar pass={kg.pass}/>
+                <StrengthBar pass={kg.pass}/>
               </div>
               <div className="field">
                 <label className="fld-lbl">Confirm Passphrase</label>
-                <input className={`inp${kg.passErr?' inp-err':''}`} type={showPass?'text':'password'}
-                  value={kg.passConfirm} placeholder="Repeat passphrase..."
-                  onChange={e => setKg(p => ({...p, passConfirm:e.target.value, passErr:''}))}
-                  onKeyDown={e => e.key==='Enter' && onNextPass()}/>
-                {kg.passErr && <span className="fld-err">{kg.passErr}</span>}
+                <div style={{position:'relative'}}>
+                  <input className={`inp inp-mono${kg.passErr?' inp-err':''}`}
+                    type={showPass?'text':'password'} value={kg.passConfirm}
+                    placeholder="Repeat passphrase..."
+                    onChange={e=>setKg(p=>({...p,passConfirm:e.target.value,passErr:''}))}  
+                    onKeyDown={e=>e.key==='Enter'&&onNextPass()}
+                    style={{paddingRight:36}}/>
+                  {kg.passConfirm&&kg.pass===kg.passConfirm&&(
+                    <span style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',color:'#00E676'}}><ICheck/></span>
+                  )}
+                </div>
+                {kg.passErr&&<span className="fld-err">{kg.passErr}</span>}
               </div>
-              <button className="btn btn-primary btn-full mt-2"
-                disabled={kg.pass.length < 8}
-                onClick={onNextPass}>
-                Continue →
-              </button>
+              <div style={{display:'flex',justifyContent:'space-between',marginTop:'var(--s2)'}}>
+                <button className="btn btn-ghost"
+                  onClick={()=>setKg(p=>({...p,step:p.isRestore?'mnemonic':'confirm',passErr:''}))}>← Back</button>
+                <button className="btn btn-primary" disabled={kg.pass.length<8}
+                  onClick={onNextPass}>Continue →</button>
+              </div>
             </div>
           </div>
         </div>
       )
-
       case 'genesis': return (
         <div className="kg-wrap">
           {renderStepProgress()}
           <div>
-            <h2 className="t-section mb-3" style={{fontSize:20}}>Enter Genesis Hash</h2>
-            <p className="t-sub mb-4">Genesis hash mengikat Node ID ke jaringan spesifik. Testnet dan mainnet memiliki hash yang berbeda.</p>
+            <h1 className="t-display mb-3">Network Genesis Hash</h1>
+            <p className="t-sub mb-5">Identifies which Scalar network this node will join.</p>
             <div className="col gap-4" style={{maxWidth:480}}>
               <div className="field">
-                <label className="fld-lbl">Genesis Hash (64 hex chars)</label>
-                <input className={`inp inp-mono${kg.genesis.length>0&&kg.genesis.length!==64?' inp-err':''}`}
-                  type="text" value={kg.genesis} placeholder="0000...0000 (64 karakter hexadecimal)"
-                  onChange={e => setKg(p => ({...p, genesis: e.target.value.toLowerCase()}))}
-                  autoFocus/>
-                {kg.genesis.length > 0 && kg.genesis.length !== 64 &&
-                  <span className="fld-err">Must be exactly 64 characters ({kg.genesis.length}/64)</span>
-                }
-                <span className="fld-hint">
-                  Dapatkan genesis hash di <button className="sidebar__link" style={{display:'inline',height:'auto',padding:0,fontSize:'inherit'}}
-                    onClick={() => open('https://scalar.network/genesis')}>scalar.network/genesis</button>
-                </span>
+                <label className="fld-lbl">Genesis Hash</label>
+                <input className="inp inp-mono" type="text" value={kg.genesis}
+                  placeholder="0000...0000 (64 hexadecimal characters)" maxLength={64}
+                  autoFocus
+                  style={{borderColor:kg.genesis.length===64?'#00E676':''}}
+                  onChange={e=>setKg(p=>({...p,genesis:e.target.value.toLowerCase().replace(/[^0-9a-f]/g,'')}))}/>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                  <span className="fld-hint">Get the official genesis hash at{' '}
+                    <button className="sidebar__link" style={{display:'inline',height:'auto',padding:0,fontSize:'inherit'}}
+                      onClick={()=>open('https://scalar.network/genesis')}>scalar.network/genesis ↗</button>
+                  </span>
+                  <span style={{fontSize:11,fontFamily:'var(--mono)',
+                    color:kg.genesis.length===64?'#00E676':'#71717A'}}>{kg.genesis.length} / 64</span>
+                </div>
               </div>
-              {kg.err && <div className="banner banner--error"><span className="banner__text">{kg.err}</span></div>}
-              <button className="btn btn-primary btn-full"
-                disabled={kg.genesis.length !== 64}
-                onClick={onDeriveKeys}>
-                Derive Keys &amp; Create Keystore →
-              </button>
+              {kg.err&&<div className="banner banner--error"><span className="banner__text">{kg.err}</span></div>}
+              <div style={{display:'flex',justifyContent:'space-between'}}>
+                <button className="btn btn-ghost"
+                  onClick={()=>setKg(p=>({...p,step:'passphrase',err:''}))}>← Back</button>
+                <button className="btn btn-primary btn-lg" disabled={kg.genesis.length!==64}
+                  onClick={onDeriveKeys}>Begin Derivation →</button>
+              </div>
             </div>
           </div>
         </div>
       )
-
       case 'deriving': return (
-        <div className="kg-wrap" style={{alignItems:'center',textAlign:'center'}}>
+        <div className="kg-wrap">
           {renderStepProgress()}
-          <div style={{padding:'var(--s8) 0'}}>
-            <div style={{width:64,height:64,margin:'0 auto var(--s5)',position:'relative'}}>
-              <div style={{position:'absolute',inset:0,border:'2px solid #FFFFFF20',borderRadius:'50%'}}/>
-              <div style={{position:'absolute',inset:0,border:'2px solid transparent',borderTopColor:'#FFFFFF',borderRadius:'50%',animation:'spin 1s linear infinite'}}/>
-            </div>
-            <h2 className="t-section mb-3" style={{fontSize:20}}>Deriving Keys...</h2>
-            <p className="t-sub mb-5">NodeID via BLAKE3 + NodeKey via Argon2id 64 MB (~30 seconds)</p>
-            {ram && (
-              <p style={{fontSize:12,color:'#52525B',fontFamily:'var(--mono)'}}>
-                RAM tersedia: {(ram.available_mb/1024).toFixed(1)} GB
-              </p>
-            )}
-            <div className="callout callout--warn mt-4" style={{textAlign:'left',maxWidth:400,margin:'var(--s5) auto 0'}}>
-              ⚠ Do not close this application while derivation is in progress.
+          <div>
+            <h1 className="t-display mb-3">Generating Node Identity</h1>
+            <p className="t-sub mb-5" style={{color:'#FFD600'}}>Do not close this application.</p>
+            <div className="col gap-4">
+              <div style={{background:'#00E67610',border:'1px solid #00E67630',borderRadius:'var(--r-lg)',
+                padding:'var(--s4)',display:'flex',alignItems:'flex-start',gap:'var(--s3)'}}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00E676"
+                  strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0,marginTop:2}}>
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+                <div>
+                  <div style={{fontSize:13,fontWeight:600,color:'#00E676',marginBottom:4}}>Network connections are suspended during key derivation.</div>
+                  <div style={{fontSize:11,color:'#71717A'}}>Your mnemonic never leaves this device.</div>
+                </div>
+              </div>
+              {ram&&<div style={{fontSize:11,color:'#71717A',fontFamily:'var(--mono)'}}>Available RAM: {(ram.available_mb/1024).toFixed(1)} GB</div>}
+              <div className="col gap-3">
+                {[
+                  {label:'Node ID via BLAKE3',sub:'Deterministic derivation (instant)',badge:'< 1s',done:derivPhase>=1,running:false},
+                  {label:'NodeKey via Argon2id 64MB',sub:'Memory-hard derivation (~30 seconds)',badge:'~30s',done:derivPhase>=2,running:derivPhase===1},
+                  {label:'Keystore Encryption',sub:'Argon2id + XChaCha20-Poly1305',badge:'~1s',done:derivPhase>=3,running:derivPhase===2},
+                ].map(({label,sub,badge,done,running},i)=>(
+                  <div key={i} style={{display:'flex',alignItems:'center',gap:'var(--s4)',
+                    background:'var(--surf-02)',border:'1px solid var(--bdr-subtle)',borderRadius:'var(--r-lg)',padding:'var(--s4)'}}>
+                    <div style={{width:24,height:24,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                      {done?(<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00E676" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                      ):running?(<div style={{width:16,height:16,border:'2px solid #FFFFFF30',borderTopColor:'#FFFFFF',borderRadius:'50%',animation:'spin 0.7s linear infinite'}}/>
+                      ):(<div style={{width:8,height:8,borderRadius:'50%',background:'var(--surf-04)'}}/>)}
+                    </div>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,fontWeight:500,color:done?'#FFFFFF':'#A1A1AA'}}>{label}</div>
+                      <div style={{fontSize:11,color:'#71717A',marginTop:2}}>{sub}</div>
+                      {running&&<div style={{marginTop:6}}>
+                        <div style={{height:4,background:'var(--surf-03)',borderRadius:2,overflow:'hidden'}}>
+                          <div style={{height:'100%',background:'#FFFFFF',borderRadius:2,animation:'progress-pulse 2s ease-in-out infinite'}}/>
+                        </div>
+                      </div>}
+                    </div>
+                    <span style={{fontSize:11,fontFamily:'var(--mono)',fontWeight:700,color:'#52525B',textTransform:'uppercase',letterSpacing:'0.05em'}}>{badge}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{borderTop:'1px solid var(--bdr-subtle)',paddingTop:'var(--s4)'}}>
+                <button className="btn btn-ghost btn-sm"
+                  onClick={()=>setModal({title:'Cancel Derivation?',body:'Are you sure? All derivation progress will be lost.',onConfirm:resetKeygen})}>Cancel</button>
+              </div>
             </div>
           </div>
         </div>
       )
-
       case 'complete': {
         const r = kg.result!
         return (
           <div className="kg-wrap">
             {renderStepProgress()}
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:"var(--s3)",marginBottom:"var(--s4)"}}>
+              <h1 className="t-display">Node Identity Created</h1>
+              <span className="status-chip chip-active"><span className="status-chip__dot"/>KEYGEN COMPLETE</span>
+            </div>
             <div className="banner banner--success">
               <ICheck/>
-              <span className="banner__text">Node identity created successfully and ready for deployment.</span>
+              <span className="banner__text">Your encrypted keystore is ready for deployment.</span>
             </div>
             <div className="col gap-4">
               <ResultCard
