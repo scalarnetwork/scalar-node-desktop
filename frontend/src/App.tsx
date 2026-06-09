@@ -450,12 +450,8 @@ export default function App() {
   // ═══════════════════════════════════════════════════════════════
   const renderSidebar = () => (
     <aside className="sidebar">
-      <div className="sidebar__logo">
-        <img src={logoImg} alt="Scalar" style={{width:28,height:28,objectFit:"contain",filter:"brightness(0) invert(1)"}}/>
-        <div className="sidebar__logo-text">
-          <span className="sidebar__logo-name">SCALAR</span>
-          <span className="sidebar__logo-sub">NODE APP</span>
-        </div>
+      <div className="sidebar__logo" style={{justifyContent:'center'}}>
+        <img src={logoImg} alt="Scalar" style={{height:36,maxWidth:'calc(var(--sidebar-w) - 40px)',objectFit:'contain',filter:'brightness(0) invert(1)'}}/>
       </div>
       <hr className="sidebar__divider"/>
 
@@ -466,6 +462,7 @@ export default function App() {
           ['deploy',   'Deploy',   <IServer/>],
           ['manage',   'Manage',   <IGrid/>],
           ['info',     'Info',     <IInfo/>],
+          ['settings', 'Settings', <IGear/>],
         ] as [AppView, string, React.ReactElement][]).map(([view, label, icon]) => (
           <button key={view}
             className={`nav-item${appView===view?' nav-item--active':''}`}
@@ -480,14 +477,6 @@ export default function App() {
 
       <div className="sidebar__bottom">
         <hr className="sidebar__divider"/>
-        <button className={`nav-item${appView==='settings'?' nav-item--active':''}`}
-          onClick={() => setAppView('settings')}>
-          <IGear/><span>Settings</span>
-        </button>
-        <div className="sidebar__version">{appVersion}</div>
-        <button className="sidebar__link" onClick={() => open('https://scalar.network')}>
-          <ILink/><span>scalar.network</span>
-        </button>
         <button className="sidebar__link sidebar__close"
           onClick={() => setModal({
             title:'Close Application',
@@ -1052,12 +1041,12 @@ export default function App() {
     )
     return (
       <div>
-        <h1 className="t-display mb-2">Deploy Node to VPS</h1>
-        <p className="t-sub mb-5">Configure your server and deploy the scalar-node binary.</p>
+        <div style={{marginBottom:'var(--s6)'}}></div>
         <div className="deploy-layout">
           {/* Left: Server Management */}
           <div className="deploy-left">
-            <div className="section-heading">
+            <div className="card" style={{display:'flex',flexDirection:'column',gap:'var(--s4)',height:'100%'}}>
+            <div className="section-heading" style={{marginBottom:0}}>
               <span className="section-title">VPS Servers</span>
               <button className="btn btn-ghost btn-sm" onClick={() => setShowAddSrv(true)}>
                 + Add Server
@@ -1074,12 +1063,13 @@ export default function App() {
                 {servers.map(sv => renderServerCard(sv, selectServer, selServer?.id))}
               </div>
             )}
+            </div>
           </div>
 
           {/* Right: Deploy Config */}
           <div className="deploy-right">
-            <div className="log-panel" style={{flex:'none',marginBottom:'var(--s4)'}}>
-              <div style={{padding:'var(--s5)',display:'flex',flexDirection:'column',gap:'var(--s4)'}}>
+            <div className="card" style={{marginBottom:'var(--s4)'}}>
+              <div style={{display:'flex',flexDirection:'column',gap:'var(--s4)'}}>
                 <div className="deploy-form">
                   <div className="field">
                     <label className="fld-lbl">Encrypted Keystore (base64)</label>
@@ -1173,17 +1163,18 @@ export default function App() {
   const renderManage = () => {
     if (showAddSrv) return (
       <div style={{maxWidth:520}}>
-        <h1 className="t-display mb-5">Manage Nodes</h1>
+        <div style={{marginBottom:'var(--s5)'}}></div>
         {renderAddServerForm(() => setShowAddSrv(false))}
       </div>
     )
     return (
       <div>
-        <h1 className="t-display mb-5">Manage Nodes</h1>
+        <div style={{marginBottom:'var(--s5)'}}></div>
         <div className="manage-layout">
           {/* Left: Server list */}
           <div className="manage-left">
-            <div className="section-heading">
+            <div className="card">
+            <div className="section-heading" style={{marginBottom:'var(--s3)'}}>
               <span className="section-title">Your Nodes ({servers.length})</span>
               <button className="btn btn-ghost btn-sm" onClick={() => setShowAddSrv(true)}>+ Add</button>
             </div>
@@ -1201,6 +1192,7 @@ export default function App() {
                 }, selServer?.id))}
               </div>
             )}
+            </div>
           </div>
 
           {/* Right: Control + monitoring */}
@@ -1488,8 +1480,7 @@ export default function App() {
 
   const renderInfo = () => (
     <div>
-      <h1 className="t-display mb-2">Node Operator Guide</h1>
-      <p className="t-sub mb-6">Essential concepts for running a Scalar node.</p>
+      <div style={{marginBottom:'var(--s5)'}}></div>
       <div className="info-layout">
         <nav className="info-nav">
           {INFO_TOPICS.map((t, i) => (
@@ -1514,8 +1505,8 @@ export default function App() {
   // ═══════════════════════════════════════════════════════════════
   const renderSettings = () => (
     <div>
-      <h1 className="t-display mb-6">Settings</h1>
-      <div className="settings-layout">
+      <div style={{marginBottom:'var(--s5)'}}></div>
+      <div className="settings-layout" style={{margin:'0 auto'}}>
         <div className="settings-card">
           <div className="settings-card__header">
             <IGear/><span className="settings-card__title">Deployment Configuration</span>
