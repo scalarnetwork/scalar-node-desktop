@@ -4,6 +4,7 @@ import { invoke }  from "@tauri-apps/api/core"
 import { listen }  from "@tauri-apps/api/event"
 import { open }    from "@tauri-apps/plugin-shell"
 import "./App.css"
+import logoImg from "./assets/Logo4.png"
 
 // ═══════════════════════════════════════════════════════════════
 // TYPES
@@ -139,13 +140,7 @@ const IPower = () => (
     <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" x2="12" y1="2" y2="12"/>
   </svg>
 )
-const ILogoMark = () => (
-  <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
-    <rect width="32" height="32" rx="6" fill="white" fillOpacity="0.08"/>
-    <path d="M8 11h10l-4 5h6" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-    <circle cx="22" cy="21" r="3" stroke="white" strokeWidth="2"/>
-  </svg>
-)
+// Logo loaded from assets/Logo4.png
 
 // ═══════════════════════════════════════════════════════════════
 // UTILITIES
@@ -452,7 +447,7 @@ export default function App() {
   const renderSidebar = () => (
     <aside className="sidebar">
       <div className="sidebar__logo">
-        <ILogoMark />
+        <img src={logoImg} alt="Scalar" style={{width:28,height:28,objectFit:"contain",filter:"brightness(0) invert(1)"}}/>
         <div className="sidebar__logo-text">
           <span className="sidebar__logo-name">SCALAR</span>
           <span className="sidebar__logo-sub">NODE APP</span>
