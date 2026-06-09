@@ -567,50 +567,50 @@ export default function App() {
     switch(kg.step) {
 
       case 'idle': return (
-        <div className="kg-step-card">
-          <div className="kg-step-content">
+        <div className="kg-wrap">
+          <div>
             <h1 className="t-display mb-3">Create Node Identity</h1>
             <p className="t-sub">Your mnemonic is the master key for your node and wallet.</p>
-            <div style={{background:'#18181B',border:'1px solid #27272A',borderRadius:8,
-              padding:'var(--s4)',display:'flex',alignItems:'flex-start',gap:'var(--s3)'}}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFD600"
-                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0,marginTop:2}}>
-                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </div>
+          <div style={{background:'#18181B',border:'1px solid #27272A',borderRadius:8,
+            padding:'var(--s4)',display:'flex',alignItems:'flex-start',gap:'var(--s3)'}}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFD600"
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0,marginTop:2}}>
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <span className="t-sub">This mnemonic will <strong style={{color:'#FFD600'}}>NEVER</strong> be stored by this application. Write it down and store offline.</span>
+          </div>
+          <div style={{display:'flex',gap:'var(--s4)'}}>
+            <div className="card" style={{flex:1,display:'flex',flexDirection:'column',gap:'var(--s3)',cursor:'pointer'}}
+              onClick={onGenerateMnemonic}>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white"
+                strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
               </svg>
-              <span className="t-sub">This mnemonic will <strong style={{color:'#FFD600'}}>NEVER</strong> be stored by this application. Write it down and store offline.</span>
+              <h3 className="t-section">Generate New Mnemonic</h3>
+              <p className="t-sub" style={{flex:1}}>Create a brand-new node identity</p>
+              <button className="btn btn-primary btn-full"
+                onClick={ev=>{ev.stopPropagation();onGenerateMnemonic()}}>Generate New</button>
             </div>
-            <div style={{display:'flex',gap:'var(--s4)'}}>
-              <div className="card" style={{flex:1,display:'flex',flexDirection:'column',gap:'var(--s3)',cursor:'pointer'}}
-                onClick={onGenerateMnemonic}>
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white"
-                  strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
-                </svg>
-                <h3 className="t-section">Generate New Mnemonic</h3>
-                <p className="t-sub" style={{flex:1}}>Create a brand-new node identity</p>
-                <button className="btn btn-primary btn-full"
-                  onClick={ev=>{ev.stopPropagation();onGenerateMnemonic()}}>Generate New</button>
-              </div>
-              <div className="card" style={{flex:1,display:'flex',flexDirection:'column',gap:'var(--s3)',cursor:'pointer'}}
-                onClick={()=>setKg(p=>({...p,step:'mnemonic',mnemonic:[],isRestore:true}))}>
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white"
-                  strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                  <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-                </svg>
-                <h3 className="t-section">Restore from Cold Storage</h3>
-                <p className="t-sub" style={{flex:1}}>I already have 24 mnemonic words</p>
-                <button className="btn btn-ghost btn-full">Restore Existing</button>
-              </div>
+            <div className="card" style={{flex:1,display:'flex',flexDirection:'column',gap:'var(--s3)',cursor:'pointer'}}
+              onClick={()=>setKg(p=>({...p,step:'mnemonic',mnemonic:[],isRestore:true}))}>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white"
+                strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              <h3 className="t-section">Restore from Cold Storage</h3>
+              <p className="t-sub" style={{flex:1}}>I already have 24 mnemonic words</p>
+              <button className="btn btn-ghost btn-full">Restore Existing</button>
             </div>
           </div>
         </div>
       )
       case 'mnemonic': return (
-        <div className="kg-step-card">
+        <div className="kg-wrap">
           {renderStepProgress()}
-          <div className="kg-step-content">
+          <div>
             {kg.mnemonic.length>0 ? (
               <>
                 <h1 className="t-display mb-3">Secure Your Mnemonic</h1>
@@ -672,29 +672,12 @@ export default function App() {
               </>
             )}
           </div>
-          <div className="kg-nav">
-            {kg.mnemonic.length>0 ? (
-              <>
-                <button className="btn btn-ghost" onClick={()=>setKg(p=>({...p,step:'idle'}))}>← Back</button>
-                <div className="flex-1" />
-                <button className="btn btn-primary" disabled={!kg.revealed}
-                  onClick={()=>setKg(p=>({...p,step:'confirm'}))}>Continue →</button>
-              </>
-            ) : (
-              <>
-                <button className="btn btn-ghost" onClick={()=>setKg(p=>({...p,step:'idle',mnemonic:[],isRestore:false}))}>← Back</button>
-                <div className="flex-1" />
-                <button className="btn btn-primary" disabled={kg.mnemonic.length!==24}
-                  onClick={()=>setKg(p=>({...p,step:'passphrase'}))}>Continue →</button>
-              </>
-            )}
-          </div>
         </div>
       )
       case 'confirm': return (
-        <div className="kg-step-card">
+        <div className="kg-wrap">
           {renderStepProgress()}
-          <div className="kg-step-content">
+          <div>
             <h1 className="t-display mb-3">Confirm Your Backup</h1>
             <p className="t-sub mb-5">Enter the words at positions <strong style={{color:'#fff'}}>7</strong>, <strong style={{color:'#fff'}}>14</strong>, and <strong style={{color:'#fff'}}>21</strong></p>
             <div className="col gap-4" style={{maxWidth:360}}>
@@ -722,22 +705,21 @@ export default function App() {
                   {kg[err]&&<span className="fld-err">Incorrect. Check your written backup.</span>}
                 </div>
               ))}
+              <div style={{display:'flex',justifyContent:'space-between',marginTop:'var(--s2)'}}>
+                <button className="btn btn-ghost"
+                  onClick={()=>setKg(p=>({...p,step:'mnemonic',word7:'',word14:'',word21:'',word7Err:'',word14Err:'',word21Err:''}))}>← Back</button>
+                <button className="btn btn-primary"
+                  disabled={!kg.word7.trim()||!kg.word14.trim()||!kg.word21.trim()}
+                  onClick={onConfirmWords}>Continue →</button>
+              </div>
             </div>
-          </div>
-          <div className="kg-nav">
-            <button className="btn btn-ghost"
-              onClick={()=>setKg(p=>({...p,step:'mnemonic',word7:'',word14:'',word21:'',word7Err:'',word14Err:'',word21Err:''}))}>← Back</button>
-            <div className="flex-1" />
-            <button className="btn btn-primary"
-              disabled={!kg.word7.trim()||!kg.word14.trim()||!kg.word21.trim()}
-              onClick={onConfirmWords}>Continue →</button>
           </div>
         </div>
       )
       case 'passphrase': return (
-        <div className="kg-step-card">
+        <div className="kg-wrap">
           {renderStepProgress()}
-          <div className="kg-step-content">
+          <div>
             <h1 className="t-display mb-3">Create Passphrase</h1>
             <p className="t-sub mb-5">Encrypts your keystore. Required every time the node starts.</p>
             <div className="col gap-4" style={{maxWidth:380}}>
@@ -766,21 +748,20 @@ export default function App() {
                 </div>
                 {kg.passErr&&<span className="fld-err">{kg.passErr}</span>}
               </div>
+              <div style={{display:'flex',justifyContent:'space-between',marginTop:'var(--s2)'}}>
+                <button className="btn btn-ghost"
+                  onClick={()=>setKg(p=>({...p,step:p.isRestore?'mnemonic':'confirm',passErr:''}))}>← Back</button>
+                <button className="btn btn-primary" disabled={kg.pass.length<8}
+                  onClick={onNextPass}>Continue →</button>
+              </div>
             </div>
-          </div>
-          <div className="kg-nav">
-            <button className="btn btn-ghost"
-              onClick={()=>setKg(p=>({...p,step:p.isRestore?'mnemonic':'confirm',passErr:''}))}>← Back</button>
-            <div className="flex-1" />
-            <button className="btn btn-primary" disabled={kg.pass.length<8}
-              onClick={onNextPass}>Continue →</button>
           </div>
         </div>
       )
       case 'genesis': return (
-        <div className="kg-step-card">
+        <div className="kg-wrap">
           {renderStepProgress()}
-          <div className="kg-step-content">
+          <div>
             <h1 className="t-display mb-3">Network Genesis Hash</h1>
             <p className="t-sub mb-5">Identifies which Scalar network this node will join.</p>
             <div className="col gap-4" style={{maxWidth:480}}>
@@ -801,21 +782,20 @@ export default function App() {
                 </div>
               </div>
               {kg.err&&<div className="banner banner--error"><span className="banner__text">{kg.err}</span></div>}
+              <div style={{display:'flex',justifyContent:'space-between'}}>
+                <button className="btn btn-ghost"
+                  onClick={()=>setKg(p=>({...p,step:'passphrase',err:''}))}>← Back</button>
+                <button className="btn btn-primary btn-lg" disabled={kg.genesis.length!==64}
+                  onClick={onDeriveKeys}>Begin Derivation →</button>
+              </div>
             </div>
-          </div>
-          <div className="kg-nav">
-            <button className="btn btn-ghost"
-              onClick={()=>setKg(p=>({...p,step:'passphrase',err:''}))}>← Back</button>
-            <div className="flex-1" />
-            <button className="btn btn-primary btn-lg" disabled={kg.genesis.length!==64}
-              onClick={onDeriveKeys}>Begin Derivation →</button>
           </div>
         </div>
       )
       case 'deriving': return (
-        <div className="kg-step-card kg-step-card--center">
+        <div className="kg-wrap">
           {renderStepProgress()}
-          <div className="kg-step-content" style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',flex:1}}>
+          <div>
             <h1 className="t-display mb-3">Generating Node Identity</h1>
             <p className="t-sub mb-5" style={{color:'#FFD600'}}>Do not close this application.</p>
             <div className="col gap-4">
@@ -857,66 +837,63 @@ export default function App() {
                   </div>
                 ))}
               </div>
+              <div style={{borderTop:'1px solid var(--bdr-subtle)',paddingTop:'var(--s4)'}}>
+                <button className="btn btn-ghost btn-sm"
+                  onClick={()=>setModal({title:'Cancel Derivation?',body:'Are you sure? All derivation progress will be lost.',onConfirm:resetKeygen})}>Cancel</button>
+              </div>
             </div>
-          </div>
-          <div className="kg-nav">
-            <button className="btn btn-ghost btn-sm"
-              onClick={()=>setModal({title:'Cancel Derivation?',body:'Are you sure? All derivation progress will be lost.',onConfirm:resetKeygen})}>Cancel</button>
           </div>
         </div>
       )
       case 'complete': {
         const r = kg.result!
         return (
-          <div className="kg-step-card">
+          <div className="kg-wrap">
             {renderStepProgress()}
-            <div className="kg-step-content">
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:"var(--s3)",marginBottom:"var(--s4)"}}>
-                <h1 className="t-display">Node Identity Created</h1>
-                <span className="status-chip chip-active"><span className="status-chip__dot"/>KEYGEN COMPLETE</span>
-              </div>
-              <div className="banner banner--success">
-                <ICheck/>
-                <span className="banner__text">Your encrypted keystore is ready for deployment.</span>
-              </div>
-              <div className="col gap-4">
-                <ResultCard
-                  title="Encrypted Keystore"
-                  sub="Deploy this to your VPS via the Deploy tab"
-                  value={r.keystore_b64}
-                  readonly={false}/>
-                <ResultCard
-                  title="Node ID"
-                  sub="Register this ID with the Scalar network"
-                  value={r.node_id_hex}
-                  readonly={false}/>
-                <ResultCard
-                  title="Wallet Address"
-                  sub="Node rewards will be sent to this address"
-                  value={r.wallet_address}
-                  readonly={true}
-                  notice="READ-ONLY — Use Scalar Wallet App to manage coins"/>
-              </div>
-              <hr className="divider"/>
-              <div>
-                <h3 className="t-section mb-3">What's next?</h3>
-                <p className="t-sub mb-4">Go to the Deploy tab to install this node on your VPS.</p>
-              </div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:"var(--s3)",marginBottom:"var(--s4)"}}>
+              <h1 className="t-display">Node Identity Created</h1>
+              <span className="status-chip chip-active"><span className="status-chip__dot"/>KEYGEN COMPLETE</span>
             </div>
-            <div className="kg-nav">
-              <button className="btn btn-ghost"
-                onClick={() => setModal({
-                  title:'Reset Keygen?',
-                  body:'Ini akan menghapus semua hasil keygen saat ini.',
-                  onConfirm: resetKeygen
-                })}>
-                Start Over
-              </button>
-              <div className="flex-1" />
-              <button className="btn btn-primary btn-lg"
-                onClick={() => { setAppView('deploy') }}>
-                Open Deploy Tab →
-              </button>
+            <div className="banner banner--success">
+              <ICheck/>
+              <span className="banner__text">Your encrypted keystore is ready for deployment.</span>
+            </div>
+            <div className="col gap-4">
+              <ResultCard
+                title="Encrypted Keystore"
+                sub="Deploy this to your VPS via the Deploy tab"
+                value={r.keystore_b64}
+                readonly={false}/>
+              <ResultCard
+                title="Node ID"
+                sub="Register this ID with the Scalar network"
+                value={r.node_id_hex}
+                readonly={false}/>
+              <ResultCard
+                title="Wallet Address"
+                sub="Node rewards will be sent to this address"
+                value={r.wallet_address}
+                readonly={true}
+                notice="READ-ONLY — Use Scalar Wallet App to manage coins"/>
+            </div>
+            <hr className="divider"/>
+            <div>
+              <h3 className="t-section mb-3">What's next?</h3>
+              <p className="t-sub mb-4">Go to the Deploy tab to install this node on your VPS.</p>
+              <div className="row gap-3">
+                <button className="btn btn-primary btn-lg flex-1"
+                  onClick={() => { setAppView('deploy') }}>
+                  Open Deploy Tab →
+                </button>
+                <button className="btn btn-ghost"
+                  onClick={() => setModal({
+                    title:'Reset Keygen?',
+                    body:'Ini akan menghapus semua hasil keygen saat ini.',
+                    onConfirm: resetKeygen
+                  })}>
+                  Start Over
+                </button>
+              </div>
             </div>
           </div>
         )
