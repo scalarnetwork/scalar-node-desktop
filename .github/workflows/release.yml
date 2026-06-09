@@ -13,17 +13,14 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
-
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-
       - name: Cache Rust dependencies
         uses: actions/cache@v4
         with:
@@ -32,16 +29,14 @@ jobs:
             ~/.cargo/git
             src-tauri/target
           key: windows-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
-
       - name: Install frontend dependencies
         run: npm ci --prefix frontend
-
+      - name: Build frontend
+        run: npm run build --prefix frontend
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2.0" --locked
-
       - name: Build Tauri app (Windows)
         run: cargo tauri build --bundles msi
-
       - name: Upload Windows MSI
         uses: actions/upload-artifact@v4
         with:
@@ -53,7 +48,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -61,17 +55,14 @@ jobs:
             libwebkit2gtk-4.1-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev patchelf
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
-
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-
       - name: Cache Rust dependencies
         uses: actions/cache@v4
         with:
@@ -80,16 +71,14 @@ jobs:
             ~/.cargo/git
             src-tauri/target
           key: linux-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
-
       - name: Install frontend dependencies
         run: npm ci --prefix frontend
-
+      - name: Build frontend
+        run: npm run build --prefix frontend
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2.0" --locked
-
       - name: Build Tauri app (Linux)
         run: cargo tauri build --bundles deb,appimage
-
       - name: Upload Linux packages
         uses: actions/upload-artifact@v4
         with:
@@ -99,8 +88,45 @@ jobs:
             src-tauri/target/release/bundle/appimage/*.AppImage
           if-no-files-found: warn
 
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: macos-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
+      - name: Build frontend
+        run: npm run build --prefix frontend
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.0" --locked
+      - name: Build Tauri app (macOS universal)
+        run: cargo tauri build --bundles dmg --target universal-apple-darwin
+      - name: Upload macOS DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-installer
+          path: src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+
   create-release:
-    needs: [build-windows, build-linux]
+    needs: [build-windows, build-linux, build-macos]
     runs-on: ubuntu-latest
     steps:
       - name: Download Windows artifact
@@ -108,13 +134,16 @@ jobs:
         with:
           name: windows-installer
           path: ./artifacts/windows
-
       - name: Download Linux artifact
         uses: actions/download-artifact@v4
         with:
           name: linux-packages
           path: ./artifacts/linux
-
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-installer
+          path: ./artifacts/macos
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -126,17 +155,20 @@ jobs:
 
             ### Downloads
             - **Windows**: `.msi` installer
+            - **macOS**: `.dmg` (universal: Intel + Apple Silicon, unsigned)
             - **Linux**: `.deb` (Debian/Ubuntu) or `.AppImage`
 
             ### Requirements
             - Windows 10/11 with WebView2 (pre-installed on Win11)
+            - macOS: right-click the app then Open (unsigned build)
             - SSH access to Oracle VPS nodes
 
             ### Usage
-            1. Open app → Keygen tab → Generate mnemonic
-            2. Deploy tab → Select Oracle node → Deploy
+            1. Open app, Keygen tab, Generate mnemonic
+            2. Deploy tab, Select Oracle node, Deploy
           files: |
             ./artifacts/windows/*.msi
+            ./artifacts/macos/*.dmg
             ./artifacts/linux/*.deb
             ./artifacts/linux/*.AppImage
           fail_on_unmatched_files: false
