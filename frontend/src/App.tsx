@@ -1508,7 +1508,6 @@ export default function App() {
           ))}
         </nav>
         <div className="info-content">
-          <div className="info-content__icon" style={{fontSize:48}}>{INFO_CONTENT[infoTopic]?.icon}</div>
           <h2 className="info-content__title">{INFO_CONTENT[infoTopic]?.title}</h2>
           <hr className="divider"/>
           {INFO_CONTENT[infoTopic]?.body}
