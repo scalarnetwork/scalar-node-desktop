@@ -8,7 +8,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 sysinfo = "0.30"
-tauri = { version = "2", features = ["tray-icon"] }
+tauri = { version = "2", features = ["tray-icon", "devtools"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 scalar-crypto = { path = "scalar-crypto" }
