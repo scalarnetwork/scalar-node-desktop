@@ -1035,13 +1035,16 @@ export default function App() {
   const renderDeploy = () => {
     if (showAddSrv) return (
       <div style={{maxWidth:520}}>
-        <h1 className="t-display mb-5">Deploy Node to VPS</h1>
+        <div style={{marginBottom:'var(--s6)'}}>
+          <h1 className="t-display" style={{marginBottom:'var(--s2)'}}>Deploy Node to VPS</h1>
+          <p className="t-sub">Configure server connections and deploy the scalar-node binary.</p>
+        </div>
         {renderAddServerForm(() => setShowAddSrv(false))}
       </div>
     )
     return (
       <div>
-        <div style={{marginBottom:'var(--s5)'}}>
+        <div style={{marginBottom:'var(--s7)'}}>
           <h1 className="t-display" style={{marginBottom:'var(--s2)'}}>Deploy Node to VPS</h1>
           <p className="t-sub">Configure server connections and deploy the scalar-node binary.</p>
         </div>
@@ -1166,13 +1169,16 @@ export default function App() {
   const renderManage = () => {
     if (showAddSrv) return (
       <div style={{maxWidth:520}}>
-        <div style={{marginBottom:'var(--s5)'}}></div>
+        <div style={{marginBottom:'var(--s6)'}}>
+          <h1 className="t-display" style={{marginBottom:'var(--s2)'}}>Manage Nodes</h1>
+          <p className="t-sub">Monitor status, view logs, and control your running nodes.</p>
+        </div>
         {renderAddServerForm(() => setShowAddSrv(false))}
       </div>
     )
     return (
       <div>
-        <div style={{marginBottom:'var(--s5)'}}>
+        <div style={{marginBottom:'var(--s7)'}}>
           <h1 className="t-display" style={{marginBottom:'var(--s2)'}}>Manage Nodes</h1>
           <p className="t-sub">Monitor status, view logs, and control your running nodes.</p>
         </div>
@@ -1494,7 +1500,7 @@ export default function App() {
 
   const renderInfo = () => (
     <div>
-      <div style={{marginBottom:'var(--s5)'}}>
+      <div style={{marginBottom:'var(--s7)'}}>
         <h1 className="t-display" style={{marginBottom:'var(--s2)'}}>Node Operator Guide</h1>
         <p className="t-sub">Essential concepts for running a Scalar node.</p>
       </div>
@@ -1521,7 +1527,7 @@ export default function App() {
   // ═══════════════════════════════════════════════════════════════
   const renderSettings = () => (
     <div>
-      <div style={{marginBottom:'var(--s5)'}}>
+      <div style={{marginBottom:'var(--s7)'}}>
         <h1 className="t-display" style={{marginBottom:'var(--s2)'}}>Settings</h1>
         <p className="t-sub">Configure application preferences and deployment options.</p>
       </div>
