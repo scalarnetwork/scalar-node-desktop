@@ -451,7 +451,7 @@ export default function App() {
   const renderSidebar = () => (
     <aside className="sidebar">
       <div className="sidebar__logo" style={{justifyContent:'center'}}>
-        <img src={logoImg} alt="Scalar" style={{height:36,maxWidth:'calc(var(--sidebar-w) - 40px)',objectFit:'contain',filter:'brightness(0) invert(1)'}}/>
+        <img src={logoImg} alt="Scalar" style={{height:29,maxWidth:'calc(var(--sidebar-w) - 40px)',objectFit:'contain',filter:'brightness(0) invert(1)'}}/>
       </div>
       <hr className="sidebar__divider"/>
 
@@ -1198,10 +1198,18 @@ export default function App() {
           {/* Right: Control + monitoring */}
           <div className="manage-right">
             {!selServer ? (
-              <div className="empty-state">
-                <div className="empty-state__icon"><IGrid /></div>
-                <div className="empty-state__title">Select a server</div>
-                <div className="empty-state__sub">Choose a server from the list to view node status</div>
+              <div className="card" style={{display:'flex',flexDirection:'column',
+                alignItems:'center',justifyContent:'center',minHeight:240,
+                gap:'var(--s4)',textAlign:'center'}}>
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none"
+                  stroke="var(--surf-04)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect width="7" height="7" x="3" y="3" rx="1"/>
+                  <rect width="7" height="7" x="14" y="3" rx="1"/>
+                  <rect width="7" height="7" x="3" y="14" rx="1"/>
+                  <rect width="7" height="7" x="14" y="14" rx="1"/>
+                </svg>
+                <div style={{fontSize:'var(--t-section)',fontWeight:'var(--fw6)',color:'var(--t4)'}}>Select a server</div>
+                <div style={{fontSize:'var(--t-body)',color:'var(--t5)',maxWidth:280}}>Choose a server from the list to view node status</div>
               </div>
             ) : (
               <>
@@ -1506,7 +1514,8 @@ export default function App() {
   const renderSettings = () => (
     <div>
       <div style={{marginBottom:'var(--s5)'}}></div>
-      <div className="settings-layout" style={{margin:'0 auto'}}>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'var(--s5)',alignItems:'start'}}>
+        <div>
         <div className="settings-card">
           <div className="settings-card__header">
             <IGear/><span className="settings-card__title">Deployment Configuration</span>
@@ -1523,7 +1532,9 @@ export default function App() {
             </div>
           </div>
         </div>
+        </div>
 
+        <div style={{display:'flex',flexDirection:'column',gap:'var(--s5)'}}>
         <div className="settings-card">
           <div className="settings-card__header">
             <IInfo/><span className="settings-card__title">About</span>
@@ -1572,6 +1583,7 @@ export default function App() {
               </button>
             </div>
           </div>
+        </div>
         </div>
       </div>
     </div>
