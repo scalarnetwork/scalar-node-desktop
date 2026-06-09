@@ -217,12 +217,12 @@ const ResultCard = ({ title, sub, value, readonly, notice }:
           <div className="row gap-2">
             {readonly && <span className="readonly-badge">READ-ONLY</span>}
             <button className={`copy-btn${copied?' copy-btn--ok':''}`} onClick={() => copy(value)}>
-              {copied ? <><ICheck/> Disalin</> : <><ICopy/> Salin</>}
+              {copied ? <><ICheck/> Copied</> : <><ICopy/> Copy</>}
             </button>
           </div>
         </div>
         <div className={`result-card__value${readonly?' result-card__value--readonly':''}`}>
-          {value.length > 80 ? value.substring(0,80)+'...' : value}
+          {value}
         </div>
         {notice && <p style={{fontSize:11,color:'#71717A',marginTop:'var(--s1)'}}>{notice}</p>}
       </div>
@@ -258,6 +258,7 @@ export default function App() {
   })
   const [showPass, setShowPass] = useState(false)
   const [derivPhase, setDerivPhase] = useState<0|1|2|3>(0)
+  const [restoreInput, setRestoreInput] = useState('')
   const [ram, setRam] = useState<RamInfo|null>(null)
 
   // ── Deploy state ──────────────────────────────────────────────
@@ -408,7 +409,8 @@ export default function App() {
       pass:'', passConfirm:'', passErr:'', genesis:'', result:null, err:'', isRestore:false
     })
     setShowPass(false)
-  setDerivPhase(0)
+    setDerivPhase(0)
+    setRestoreInput('')
   }
 
   // ── Deploy handlers ───────────────────────────────────────────
@@ -636,7 +638,8 @@ export default function App() {
         <div className="kg-wrap">
           {renderStepProgress()}
           <div>
-            {kg.mnemonic.length>0 ? (
+            {!kg.isRestore ? (
+              // Generate path — show mnemonic grid
               <>
                 <h1 className="t-display mb-3">Secure Your Mnemonic</h1>
                 <div style={{background:'#FFD60010',border:'1px solid #FFD60030',borderRadius:'var(--r-lg)',
@@ -664,34 +667,49 @@ export default function App() {
                   ))}
                 </div>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                  <button className="btn btn-ghost btn-sm" onClick={()=>{
-                    copyText(kg.mnemonic.join(' '))
-                    toast('warning','Copied — Keep this off digital storage')
-                  }}><ICopy/> Copy to Clipboard</button>
-                  <button className="btn btn-primary" disabled={!kg.revealed}
-                    onClick={()=>setKg(p=>({...p,step:'confirm'}))}>
-                    Next: Confirm Mnemonic →
-                  </button>
+                  <button className="btn btn-ghost"
+                    onClick={()=>setKg(p=>({...p,step:'idle',revealed:false}))}>← Back</button>
+                  <div style={{display:'flex',gap:'var(--s3)',alignItems:'center'}}>
+                    <button className="btn btn-ghost btn-sm" onClick={()=>{
+                      copyText(kg.mnemonic.join(' '))
+                      toast('warning','Copied — Keep this off digital storage')
+                    }}><ICopy/> Copy to Clipboard</button>
+                    <button className="btn btn-primary" disabled={!kg.revealed}
+                      onClick={()=>setKg(p=>({...p,step:'confirm'}))}>Next: Confirm Mnemonic →</button>
+                  </div>
                 </div>
                 {!kg.revealed&&<p className="fld-hint mt-2" style={{textAlign:'right'}}>
                   Reveal your mnemonic first before continuing
                 </p>}
               </>
-            ):(
+            ) : (
+              // Restore path — dedicated input view, never switches to grid
               <>
                 <h1 className="t-display mb-3">Restore from Cold Storage</h1>
-                <p className="t-sub mb-4">Enter your 24-word mnemonic (separated by spaces or newlines):</p>
+                <p className="t-sub mb-4">Enter your 24 mnemonic words below. Separate words with spaces or line breaks.</p>
                 <div className="col gap-4">
-                  <textarea className="inp ta inp-mono" rows={6}
+                  <textarea className="inp ta inp-mono" rows={8}
                     placeholder="scalar abandon ability able about above absent absorb..."
-                    onChange={e=>{const w=e.target.value.trim().split(/\s+/).filter(Boolean);if(w.length>0)setKg(p=>({...p,mnemonic:w}))}}/>
-                  {kg.mnemonic.length>0&&kg.mnemonic.length!==24&&
-                    <p className="fld-err">Mnemonic must be exactly 24 words (currently {kg.mnemonic.length})</p>
-                  }
+                    value={restoreInput}
+                    onChange={e=>setRestoreInput(e.target.value)}
+                    style={{resize:'none',lineHeight:1.8}}/>
+                  {(()=>{
+                    const words = restoreInput.trim().split(/[\s\n]+/).filter(Boolean).map((w:string)=>w.replace(/^\d+/,'')).filter(Boolean)
+                    if (words.length>0 && words.length!==24)
+                      return <p className="fld-err">{words.length} / 24 words entered</p>
+                    if (words.length===24)
+                      return <p style={{fontSize:12,color:'#00E676'}}>✓ 24 words ready</p>
+                    return null
+                  })()}
                   <div style={{display:'flex',justifyContent:'space-between'}}>
-                    <button className="btn btn-ghost" onClick={()=>setKg(p=>({...p,step:'idle',mnemonic:[],isRestore:false}))}>← Back</button>
-                    <button className="btn btn-primary" disabled={kg.mnemonic.length!==24}
-                      onClick={()=>setKg(p=>({...p,step:'passphrase'}))}>Continue →</button>
+                    <button className="btn btn-ghost"
+                      onClick={()=>{ setKg(p=>({...p,step:'idle',mnemonic:[],isRestore:false})); setRestoreInput('') }}>← Back</button>
+                    <button className="btn btn-primary"
+                      disabled={restoreInput.trim().split(/[\s\n]+/).filter(Boolean).map((w:string)=>w.replace(/^\d+/,'')).filter(Boolean).length!==24}
+                      onClick={()=>{
+                        const words=restoreInput.trim().split(/[\s\n]+/).filter(Boolean).map((w:string)=>w.replace(/^\d+/,'')).filter(Boolean)
+                        setKg(p=>({...p,mnemonic:words,step:'passphrase'}))
+                      }}>Continue →</button>
                   </div>
                 </div>
               </>
@@ -747,33 +765,35 @@ export default function App() {
           <div>
             <h1 className="t-display mb-3">Create Passphrase</h1>
             <p className="t-sub mb-5">Encrypts your keystore. Required every time the node starts.</p>
-            <div className="col gap-4" style={{maxWidth:380}}>
-              <div className="field">
-                <label className="fld-lbl">Passphrase</label>
-                <div className="inp-wrap">
-                  <input className="inp inp-mono" type={showPass?'text':'password'} value={kg.pass}
-                    placeholder="Create a strong passphrase..."
-                    onChange={e=>setKg(p=>({...p,pass:e.target.value,passErr:''}))} autoFocus/>
-                  <button className="inp-ico" onClick={()=>setShowPass(v=>!v)}><IEye off={showPass}/></button>
+            <div className="col gap-4">
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'var(--s4)'}}>
+                <div className="field">
+                  <label className="fld-lbl">Passphrase</label>
+                  <div className="inp-wrap">
+                    <input className="inp inp-mono" type={showPass?'text':'password'} value={kg.pass}
+                      placeholder="Create a strong passphrase..."
+                      onChange={e=>setKg(p=>({...p,pass:e.target.value,passErr:''}))} autoFocus/>
+                    <button className="inp-ico" onClick={()=>setShowPass(v=>!v)}><IEye off={showPass}/></button>
+                  </div>
+                  <StrengthBar pass={kg.pass}/>
                 </div>
-                <StrengthBar pass={kg.pass}/>
-              </div>
-              <div className="field">
-                <label className="fld-lbl">Confirm Passphrase</label>
-                <div style={{position:'relative'}}>
-                  <input className={`inp inp-mono${kg.passErr?' inp-err':''}`}
-                    type={showPass?'text':'password'} value={kg.passConfirm}
-                    placeholder="Repeat passphrase..."
-                    onChange={e=>setKg(p=>({...p,passConfirm:e.target.value,passErr:''}))}  
-                    onKeyDown={e=>e.key==='Enter'&&onNextPass()}
-                    style={{paddingRight:36}}/>
-                  {kg.passConfirm&&kg.pass===kg.passConfirm&&(
-                    <span style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',color:'#00E676'}}><ICheck/></span>
-                  )}
+                <div className="field">
+                  <label className="fld-lbl">Confirm Passphrase</label>
+                  <div style={{position:'relative'}}>
+                    <input className={`inp inp-mono${kg.passErr?' inp-err':''}`}
+                      type={showPass?'text':'password'} value={kg.passConfirm}
+                      placeholder="Repeat passphrase..."
+                      onChange={e=>setKg(p=>({...p,passConfirm:e.target.value,passErr:''}))}  
+                      onKeyDown={e=>e.key==='Enter'&&onNextPass()}
+                      style={{paddingRight:36}}/>
+                    {kg.passConfirm&&kg.pass===kg.passConfirm&&(
+                      <span style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',color:'#00E676'}}><ICheck/></span>
+                    )}
+                  </div>
+                  {kg.passErr&&<span className="fld-err">{kg.passErr}</span>}
                 </div>
-                {kg.passErr&&<span className="fld-err">{kg.passErr}</span>}
               </div>
-              <div style={{display:'flex',justifyContent:'space-between',marginTop:'var(--s2)'}}>
+              <div style={{display:'flex',justifyContent:'space-between'}}>
                 <button className="btn btn-ghost"
                   onClick={()=>setKg(p=>({...p,step:p.isRestore?'mnemonic':'confirm',passErr:''}))}>← Back</button>
                 <button className="btn btn-primary" disabled={kg.pass.length<8}
@@ -789,7 +809,7 @@ export default function App() {
           <div>
             <h1 className="t-display mb-3">Network Genesis Hash</h1>
             <p className="t-sub mb-5">Identifies which Scalar network this node will join.</p>
-            <div className="col gap-4" style={{maxWidth:480}}>
+            <div className="col gap-4">
               <div className="field">
                 <label className="fld-lbl">Genesis Hash</label>
                 <input className="inp inp-mono" type="text" value={kg.genesis}
@@ -913,7 +933,7 @@ export default function App() {
                 <button className="btn btn-ghost"
                   onClick={() => setModal({
                     title:'Reset Keygen?',
-                    body:'Ini akan menghapus semua hasil keygen saat ini.',
+                    body:'This will clear all current keygen results.',
                     onConfirm: resetKeygen
                   })}>
                   Start Over
@@ -1427,10 +1447,10 @@ export default function App() {
       <div className="info-content__body">
         <p>The Node ID is your node's unique identity on the Scalar network, represented as a 64-character hex string.</p>
         <div className="info-content__callout">
-          Derivasi: <span className="info-mono">BLAKE3(b"scalar_nodeid" || mnemonic || genesis_hash)</span> — instan, kurang dari 1 ms.
+          Derivation: <span className="info-mono">BLAKE3(b&quot;scalar_nodeid&quot; || mnemonic || genesis_hash)</span> — instant, less than 1ms.
         </div>
-        <p>Key property: the same inputs always produce the same Node ID (deterministic). It cannot be reversed back to the mnemonic (one-way function).</p>
-        <p>One mnemonic produces one Node ID. To run multiple nodes, you need separate mnemonics.</p>
+        <p>Key property: same inputs always produce the same Node ID (deterministic). Cannot be reversed to mnemonic (one-way function).</p>
+        <p>One mnemonic produces exactly one Node ID. To run multiple nodes, use separate mnemonics for each.</p>
       </div>
     )},
     2: { icon:'🔒', title:'Keystore', body: (
