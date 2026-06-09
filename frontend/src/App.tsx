@@ -166,7 +166,7 @@ function entropyLevel(e: number): 'weak'|'fair'|'good'|'strong' {
   return 'strong'
 }
 function entropyPct(e: number): number { return Math.min((e / 80) * 100, 100) }
-const ENTROPY_LABELS = { weak:'Lemah', fair:'Cukup', good:'Kuat', strong:'Sangat Kuat' }
+const ENTROPY_LABELS = { weak:'Weak', fair:'Fair', good:'Strong', strong:'Very Strong' }
 
 async function copyText(text: string): Promise<void> {
   try { await navigator.clipboard.writeText(text) } catch(_) {}
@@ -240,16 +240,19 @@ export default function App() {
   // ── Event listeners ───────────────────────────────────────────
   useEffect(() => {
     let u1: (()=>void)|null = null, u2: (()=>void)|null = null
-    listen<{t:string;msg:string}>('deploy_log', ev => {
-      const {t,msg} = ev.payload
-      const type = t==='ok'?'ok':t==='err'?'err':t==='cmd'?'cmd':'inf'
-      setDp(p => ({...p, logs:[...p.logs,{type,text:msg}]}))
-    }).then(fn => { u1=fn })
-    listen<{t:string;msg:string}>('manage_log', ev => {
-      const {t,msg} = ev.payload
-      const type = t==='ok'?'ok':t==='err'?'err':t==='cmd'?'cmd':'inf'
-      setMg(p => ({...p, mgLogs:[...p.mgLogs,{type,text:msg}]}))
-    }).then(fn => { u2=fn })
+    const attach = async () => {
+      try { u1 = await listen<{t:string;msg:string}>('deploy_log', ev => {
+        const {t,msg} = ev.payload
+        const type = t==='ok'?'ok':t==='err'?'err':t==='cmd'?'cmd':'inf'
+        setDp(p => ({...p, logs:[...p.logs,{type,text:msg}]}))
+      }) } catch(_) {}
+      try { u2 = await listen<{t:string;msg:string}>('manage_log', ev => {
+        const {t,msg} = ev.payload
+        const type = t==='ok'?'ok':t==='err'?'err':t==='cmd'?'cmd':'inf'
+        setMg(p => ({...p, mgLogs:[...p.mgLogs,{type,text:msg}]}))
+      }) } catch(_) {}
+    }
+    attach()
     return () => { u1?.(); u2?.() }
   }, [])
 
@@ -280,7 +283,7 @@ export default function App() {
     setSelServer(srv)
     setSrvForm({ label:'', host:'', username:'ubuntu', keyPath:'' })
     setShowAddSrv(false)
-    toast('success', `Server "${srv.label}" ditambahkan`)
+    toast('success', `Server "${srv.label}" added`)
   }
   const updateServer = async () => {
     if (!editSvId) return
@@ -288,7 +291,7 @@ export default function App() {
     await persistServers(list)
     if (selServer?.id === editSvId) setSelServer({...selServer!, ...editForm})
     setEditSvId(null)
-    toast('success', 'Server diperbarui')
+    toast('success', 'Server updated')
   }
   const deleteServer = async (id: string) => {
     const list = servers.filter(sv => sv.id !== id)
@@ -320,14 +323,14 @@ export default function App() {
     const ok7  = kg.word7.trim().toLowerCase()  === kg.mnemonic[6]
     const ok14 = kg.word14.trim().toLowerCase() === kg.mnemonic[13]
     const ok21 = kg.word21.trim().toLowerCase() === kg.mnemonic[20]
-    if (!ok7)  { setKg(p => ({...p, word7Err:'Kata tidak cocok. Periksa catatan kamu.'})); return }
-    if (!ok14) { setKg(p => ({...p, word14Err:'Kata tidak cocok. Periksa catatan kamu.'})); return }
-    if (!ok21) { setKg(p => ({...p, word21Err:'Kata tidak cocok. Periksa catatan kamu.'})); return }
+    if (!ok7)  { setKg(p => ({...p, word7Err:'Word does not match. Check your notes.'})); return }
+    if (!ok14) { setKg(p => ({...p, word14Err:'Word does not match. Check your notes.'})); return }
+    if (!ok21) { setKg(p => ({...p, word21Err:'Word does not match. Check your notes.'})); return }
     setKg(p => ({...p, step:'passphrase', word7Err:'', word14Err:'', word21Err:''}))
   }
   const onNextPass = () => {
-    if (kg.pass.length < 8) { setKg(p => ({...p, passErr:'Minimum 8 karakter.'})); return }
-    if (kg.pass !== kg.passConfirm) { setKg(p => ({...p, passErr:'Passphrase tidak cocok.'})); return }
+    if (kg.pass.length < 8) { setKg(p => ({...p, passErr:'Minimum 8 characters required.'})); return }
+    if (kg.pass !== kg.passConfirm) { setKg(p => ({...p, passErr:'Passphrases do not match.'})); return }
     setKg(p => ({...p, step:'genesis', passErr:''}))
   }
   const onDeriveKeys = async () => {
@@ -339,7 +342,7 @@ export default function App() {
       setKg(p => ({...p, step:'complete', result}))
       // Pre-fill Deploy keystore
       setDp(p => ({...p, keystore: result.keystore_b64, genesis: kg.genesis}))
-      toast('success', 'Node identity berhasil dibuat')
+      toast('success', 'Node identity created successfully')
     } catch(e) {
       setKg(p => ({...p, step:'genesis', err: String(e)}))
       toast('error', 'Derivasi gagal: ' + String(e))
@@ -379,7 +382,7 @@ export default function App() {
         app: undefined
       })
       setDp(p => ({...p, deplSt:'done'}))
-      toast('success', `Node berhasil di-deploy ke ${selServer.label}`)
+      toast('success', `Node deployed to ${selServer.label}`)
     } catch(e) {
       setDp(p => ({...p, deplSt:'error'}))
       toast('error', 'Deploy gagal: ' + String(e))
@@ -439,7 +442,7 @@ export default function App() {
         host: selServer.host, username: selServer.username, keyPath: selServer.keyPath
       })
       setMg(p => ({...p, action:'idle'}))
-      toast('success', 'VPS reset selesai')
+      toast('success', 'VPS reset complete')
     } catch(e) { setMg(p => ({...p, action:'idle', err:String(e)})); toast('error', 'Reset gagal: '+String(e)) }
   }
 
@@ -488,11 +491,11 @@ export default function App() {
         </button>
         <button className="sidebar__link sidebar__close"
           onClick={() => setModal({
-            title:'Tutup Aplikasi',
-            body:'Semua proses akan dihentikan. Gunakan ini sebelum menginstall versi baru.',
+            title:'Close Application',
+            body:'All processes will be terminated. Use this before installing a new version.',
             onConfirm: () => invoke('quit_app').catch(()=>{})
           })}>
-          <IPower/><span>Tutup Aplikasi</span>
+          <IPower/><span>Close Application</span>
         </button>
       </div>
     </aside>
@@ -566,22 +569,22 @@ export default function App() {
         <div className="kg-wrap">
           <div>
             <h1 className="t-display mb-3">Create Node Identity</h1>
-            <p className="t-sub">Mnemonic kamu adalah kunci utama node dan wallet. Simpan offline sebelum melanjutkan.</p>
+            <p className="t-sub">Your mnemonic is the master key for your node and wallet. Save it offline before continuing.</p>
           </div>
           <div className="card card--warn">
             <div className="row gap-2">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color:'#FFD600',flexShrink:0}}>
                 <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
               </svg>
-              <p className="t-sub">Aplikasi ini <strong style={{color:'#FFD600'}}>TIDAK PERNAH</strong> menyimpan mnemonic kamu. Catat 24 kata di kertas fisik.</p>
+              <p className="t-sub">This application will <strong style={{color:'#FFD600'}}>NEVER</strong> store your mnemonic. Write all 24 words on physical paper.</p>
             </div>
           </div>
           <div className="col gap-4 mt-4">
             <button className="btn btn-primary btn-lg" onClick={onGenerateMnemonic}>
-              Generate Mnemonic Baru
+              Generate New Mnemonic
             </button>
             <button className="btn btn-ghost" onClick={() => setKg(p=>({...p,step:'mnemonic',mnemonic:[]}))} style={{opacity:0.7}}>
-              Restore dari Cold Storage
+              Restore from Cold Storage
             </button>
           </div>
         </div>
@@ -592,13 +595,13 @@ export default function App() {
           {renderStepProgress()}
           <div>
             <h2 className="t-section mb-3" style={{fontSize:20}}>
-              {kg.mnemonic.length > 0 ? 'MNEMONIC — 24 WORDS' : 'Masukkan Mnemonic'}
+              {kg.mnemonic.length > 0 ? 'MNEMONIC — 24 WORDS' : 'Enter Mnemonic'}
             </h2>
             {kg.mnemonic.length > 0 ? (
               <>
                 <div className="card card--warn mb-3">
                   <p style={{fontSize:12,color:'#FFD600'}}>
-                    Tulis semua 24 kata secara berurutan. Simpan offline. Jangan difoto.
+                    Write all 24 words in order. Store offline. Do not photograph.
                   </p>
                 </div>
                 <div className="mn-grid">
@@ -611,10 +614,10 @@ export default function App() {
                 </div>
                 <div className="row gap-2 mt-4">
                   <button className="btn btn-ghost btn-sm" onClick={() => setKg(p=>({...p,revealed:!p.revealed}))}>
-                    <IEye off={kg.revealed}/> {kg.revealed?'Sembunyikan':'Tampilkan'}
+                    <IEye off={kg.revealed}/> {kg.revealed?'Hide':'Reveal'}
                   </button>
                   <button className="btn btn-ghost btn-sm" onClick={() => copyText(kg.mnemonic.join(' '))}>
-                    <ICopy/> Salin
+                    <ICopy/> Copy
                   </button>
                 </div>
                 <div className="mt-5">
@@ -624,14 +627,14 @@ export default function App() {
                     Saya Sudah Catat — Lanjutkan →
                   </button>
                   {!kg.revealed && <p className="t-caption mt-2" style={{textAlign:'center',color:'#71717A'}}>
-                    Tampilkan mnemonic terlebih dahulu sebelum melanjutkan
+                    Reveal your mnemonic first before continuing
                   </p>}
                 </div>
               </>
             ) : (
               /* Restore flow */
               <div className="col gap-4">
-                <p className="t-sub">Masukkan 24 kata mnemonic kamu (pisahkan dengan spasi atau enter):</p>
+                <p className="t-sub">Enter your 24-word mnemonic (separated by spaces or newlines):</p>
                 <textarea className="inp ta inp-mono" rows={6}
                   placeholder="scalar abandon ability able about above absent absorb..."
                   onChange={e => {
@@ -641,10 +644,10 @@ export default function App() {
                 <button className="btn btn-primary btn-full"
                   disabled={kg.mnemonic.length !== 24}
                   onClick={() => setKg(p=>({...p,step:'confirm'}))}>
-                  Lanjutkan dengan Mnemonic Ini →
+                  Continue with This Mnemonic →
                 </button>
                 {kg.mnemonic.length > 0 && kg.mnemonic.length !== 24 &&
-                  <p className="fld-err">Mnemonic harus tepat 24 kata (saat ini {kg.mnemonic.length})</p>
+                  <p className="fld-err">Mnemonic must be exactly 24 words (currently {kg.mnemonic.length})</p>
                 }
               </div>
             )}
@@ -656,8 +659,8 @@ export default function App() {
         <div className="kg-wrap">
           {renderStepProgress()}
           <div>
-            <h2 className="t-section mb-3" style={{fontSize:20}}>Verifikasi Mnemonic</h2>
-            <p className="t-sub mb-4">Masukkan kata ke-<strong style={{color:'#fff'}}>7</strong>, <strong style={{color:'#fff'}}>14</strong>, dan <strong style={{color:'#fff'}}>21</strong> untuk konfirmasi pencatatan kamu.</p>
+            <h2 className="t-section mb-3" style={{fontSize:20}}>Verify Mnemonic</h2>
+            <p className="t-sub mb-4">Enter words <strong style={{color:'#fff'}}>#7</strong>, <strong style={{color:'#fff'}}>#14</strong>, and <strong style={{color:'#fff'}}>#21</strong> to confirm you have written them down.</p>
             <div className="col gap-4" style={{maxWidth:360}}>
               {([
                 {n:7,  k:'word7'  as const, err:'word7Err'  as const},
@@ -665,9 +668,9 @@ export default function App() {
                 {n:21, k:'word21' as const, err:'word21Err' as const},
               ]).map(({n,k,err}) => (
                 <div key={n} className="field">
-                  <label className="fld-lbl">Kata ke-{n}</label>
+                  <label className="fld-lbl">Word #{n}</label>
                   <input className={`inp inp-mono${kg[err]?' inp-err':''}`} type="text"
-                    value={kg[k]} placeholder="ketik kata di sini..."
+                    value={kg[k]} placeholder="type word here..."
                     autoFocus={n===7}
                     onChange={e => setKg(p => ({...p, [k]:e.target.value, [err]:''}))}
                     onKeyDown={e => e.key==='Enter' && n===21 && onConfirmWords()}/>
@@ -677,7 +680,7 @@ export default function App() {
               <button className="btn btn-primary btn-full mt-2"
                 disabled={!kg.word7.trim()||!kg.word14.trim()||!kg.word21.trim()}
                 onClick={onConfirmWords}>
-                Konfirmasi →
+                Confirm →
               </button>
             </div>
           </div>
@@ -689,13 +692,13 @@ export default function App() {
           {renderStepProgress()}
           <div>
             <h2 className="t-section mb-3" style={{fontSize:20}}>Set Passphrase</h2>
-            <p className="t-sub mb-4">Passphrase melindungi keystore. Minimum 8 karakter. Tidak dapat dipulihkan — simpan bersama mnemonic.</p>
+            <p className="t-sub mb-4">The passphrase protects your keystore. Minimum 8 characters. Cannot be recovered — store alongside your mnemonic.</p>
             <div className="col gap-4" style={{maxWidth:360}}>
               <div className="field">
                 <label className="fld-lbl">Passphrase</label>
                 <div className="inp-wrap">
                   <input className="inp" type={showPass?'text':'password'} value={kg.pass}
-                    placeholder="Buat passphrase kuat..."
+                    placeholder="Create a strong passphrase..."
                     onChange={e => setKg(p => ({...p, pass:e.target.value, passErr:''}))}
                     autoFocus/>
                   <button className="inp-ico" onClick={() => setShowPass(v=>!v)}><IEye off={showPass}/></button>
@@ -703,9 +706,9 @@ export default function App() {
                 <EntropyBar pass={kg.pass}/>
               </div>
               <div className="field">
-                <label className="fld-lbl">Konfirmasi Passphrase</label>
+                <label className="fld-lbl">Confirm Passphrase</label>
                 <input className={`inp${kg.passErr?' inp-err':''}`} type={showPass?'text':'password'}
-                  value={kg.passConfirm} placeholder="Ulangi passphrase..."
+                  value={kg.passConfirm} placeholder="Repeat passphrase..."
                   onChange={e => setKg(p => ({...p, passConfirm:e.target.value, passErr:''}))}
                   onKeyDown={e => e.key==='Enter' && onNextPass()}/>
                 {kg.passErr && <span className="fld-err">{kg.passErr}</span>}
@@ -713,7 +716,7 @@ export default function App() {
               <button className="btn btn-primary btn-full mt-2"
                 disabled={kg.pass.length < 8}
                 onClick={onNextPass}>
-                Lanjutkan →
+                Continue →
               </button>
             </div>
           </div>
@@ -724,7 +727,7 @@ export default function App() {
         <div className="kg-wrap">
           {renderStepProgress()}
           <div>
-            <h2 className="t-section mb-3" style={{fontSize:20}}>Input Genesis Hash</h2>
+            <h2 className="t-section mb-3" style={{fontSize:20}}>Enter Genesis Hash</h2>
             <p className="t-sub mb-4">Genesis hash mengikat Node ID ke jaringan spesifik. Testnet dan mainnet memiliki hash yang berbeda.</p>
             <div className="col gap-4" style={{maxWidth:480}}>
               <div className="field">
@@ -734,7 +737,7 @@ export default function App() {
                   onChange={e => setKg(p => ({...p, genesis: e.target.value.toLowerCase()}))}
                   autoFocus/>
                 {kg.genesis.length > 0 && kg.genesis.length !== 64 &&
-                  <span className="fld-err">Harus tepat 64 karakter ({kg.genesis.length}/64)</span>
+                  <span className="fld-err">Must be exactly 64 characters ({kg.genesis.length}/64)</span>
                 }
                 <span className="fld-hint">
                   Dapatkan genesis hash di <button className="sidebar__link" style={{display:'inline',height:'auto',padding:0,fontSize:'inherit'}}
@@ -761,14 +764,14 @@ export default function App() {
               <div style={{position:'absolute',inset:0,border:'2px solid transparent',borderTopColor:'#FFFFFF',borderRadius:'50%',animation:'spin 1s linear infinite'}}/>
             </div>
             <h2 className="t-section mb-3" style={{fontSize:20}}>Deriving Keys...</h2>
-            <p className="t-sub mb-5">NodeID via BLAKE3 + NodeKey via Argon2id 64 MB (~30 detik)</p>
+            <p className="t-sub mb-5">NodeID via BLAKE3 + NodeKey via Argon2id 64 MB (~30 seconds)</p>
             {ram && (
               <p style={{fontSize:12,color:'#52525B',fontFamily:'var(--mono)'}}>
                 RAM tersedia: {(ram.available_mb/1024).toFixed(1)} GB
               </p>
             )}
             <div className="callout callout--warn mt-4" style={{textAlign:'left',maxWidth:400,margin:'var(--s5) auto 0'}}>
-              ⚠ Jangan tutup aplikasi ini selama proses berlangsung.
+              ⚠ Do not close this application while derivation is in progress.
             </div>
           </div>
         </div>
@@ -781,30 +784,30 @@ export default function App() {
             {renderStepProgress()}
             <div className="banner banner--success">
               <ICheck/>
-              <span className="banner__text">Node identity berhasil dibuat dan siap untuk deployment.</span>
+              <span className="banner__text">Node identity created successfully and ready for deployment.</span>
             </div>
             <div className="col gap-4">
               <ResultCard
                 title="Encrypted Keystore"
-                sub="Deploy ini ke VPS kamu melalui tab Deploy"
+                sub="Deploy this to your VPS via the Deploy tab"
                 value={r.keystore_b64}
                 readonly={false}/>
               <ResultCard
                 title="Node ID"
-                sub="Daftarkan ID ini ke jaringan Scalar"
+                sub="Register this ID with the Scalar network"
                 value={r.node_id_hex}
                 readonly={false}/>
               <ResultCard
                 title="Wallet Address"
-                sub="Reward node akan dikirim ke alamat ini"
+                sub="Node rewards will be sent to this address"
                 value={r.wallet_address}
                 readonly={true}
-                notice="READ-ONLY — Gunakan Scalar Wallet App untuk mengelola koin"/>
+                notice="READ-ONLY — Use Scalar Wallet App to manage coins"/>
             </div>
             <hr className="divider"/>
             <div>
               <h3 className="t-section mb-3">What's next?</h3>
-              <p className="t-sub mb-4">Pergi ke tab Deploy untuk menginstall node ini ke VPS kamu.</p>
+              <p className="t-sub mb-4">Go to the Deploy tab to install this node on your VPS.</p>
               <div className="row gap-3">
                 <button className="btn btn-primary btn-lg flex-1"
                   onClick={() => { setAppView('deploy') }}>
@@ -816,7 +819,7 @@ export default function App() {
                     body:'Ini akan menghapus semua hasil keygen saat ini.',
                     onConfirm: resetKeygen
                   })}>
-                  Mulai Baru
+                  Start Over
                 </button>
               </div>
             </div>
@@ -907,7 +910,7 @@ export default function App() {
             <button className="icon-btn icon-btn--danger" title="Hapus"
               onClick={e => { e.stopPropagation(); setModal({
                 title:'Hapus Server?',
-                body:`Server "${sv.label}" akan dihapus dari daftar. Aksi ini tidak dapat dibatalkan.`,
+                body:`Server "${sv.label}" will be removed. This action cannot be undone.`,
                 onConfirm: () => deleteServer(sv.id)
               }) }}>
               <ITrash/>
@@ -920,7 +923,7 @@ export default function App() {
 
   const renderAddServerForm = (onClose: ()=>void) => (
     <div className="add-server-form">
-      <h3 className="t-section">Tambah Server</h3>
+      <h3 className="t-section">Add Server</h3>
       <div className="field">
         <label className="fld-lbl">Label</label>
         <input className="inp" type="text" value={srvForm.label} placeholder="scalar-node-1" autoFocus
@@ -946,10 +949,10 @@ export default function App() {
         </div>
       </div>
       <div className="add-server-form__footer">
-        <button className="btn btn-ghost btn-sm" onClick={onClose}>Batal</button>
+        <button className="btn btn-ghost btn-sm" onClick={onClose}>Cancel</button>
         <button className="btn btn-primary btn-sm"
           disabled={!srvForm.label.trim()||!srvForm.host.trim()}
-          onClick={addServer}>Simpan Server</button>
+          onClick={addServer}>Save Server</button>
       </div>
     </div>
   )
@@ -998,7 +1001,7 @@ export default function App() {
                   <div className="field">
                     <label className="fld-lbl">Encrypted Keystore (base64)</label>
                     <textarea className="inp ta inp-mono" rows={3} value={dp.keystore}
-                      placeholder="Paste keystore dari tab Keygen atau dari file..."
+                      placeholder="Paste keystore from the Keygen tab or from a file..."
                       onChange={e => setDp(p=>({...p,keystore:e.target.value}))}/>
                   </div>
                   <div className="field">
@@ -1030,7 +1033,7 @@ export default function App() {
                   <div className="row gap-2">
                     <button className="btn btn-ghost btn-sm"
                       disabled={!selServer||dp.connSt==='testing'} onClick={onTestConn}>
-                      {dp.connSt==='testing'?<><div className="btn-spinner"/>Testing...</>:'Test Koneksi'}
+                      {dp.connSt==='testing'?<><div className="btn-spinner"/>Testing...</>:'Test Connection'}
                     </button>
                     {dp.connSt==='ok' && <span style={{fontSize:12,color:'#00E676',display:'flex',alignItems:'center',gap:4}}><ICheck/>{dp.connMsg}</span>}
                     {dp.connSt==='err' && <span style={{fontSize:12,color:'#FF1744'}}>{dp.connMsg}</span>}
@@ -1056,7 +1059,7 @@ export default function App() {
               </div>
               <div className="log-panel__body" ref={logRef}>
                 {dp.logs.length === 0
-                  ? <div className="log-panel__empty">Log output akan muncul di sini...</div>
+                  ? <div className="log-panel__empty">Log output will appear here...</div>
                   : dp.logs.map((l,i) => (
                     <div key={i} className={`log-line log-line--${l.type}`}>
                       <span className="log-line__pfx">{l.type==='cmd'?'$':l.type==='ok'?'✓':l.type==='err'?'✗':'›'}</span>
@@ -1155,12 +1158,12 @@ export default function App() {
                   </div>
                   <div style={{borderTop:'1px solid var(--bdr-subtle)',marginTop:'var(--s4)',paddingTop:'var(--s4)'}}>
                     <p style={{fontSize:11,color:'#52525B',marginBottom:'var(--s3)'}}>
-                      Reset menghapus instalasi lama dan rebuild dari awal (~5-10 menit). Deploy ulang keystore setelahnya.
+                      Resets old installation and rebuilds from source (~5-10 min). Re-deploy keystore afterwards.
                     </p>
                     <button className="btn btn-danger btn-full" disabled={isActing}
                       onClick={() => setModal({
                         title:'Reset & Rebuild VPS?',
-                        body:`Ini akan menghentikan service, menghapus scalar-core, dan rebuild dari source untuk "${selServer.label}". Proses ~5-10 menit.`,
+                        body:`This will stop the service, remove scalar-core, and rebuild from source for "${selServer.label}". Process takes ~5-10 minutes.`,
                         onConfirm: onResetVps
                       })}>
                       {mg.action==='resetting'?<><div className="btn-spinner"/>Resetting VPS...</>:'Reset & Rebuild VPS'}
@@ -1282,7 +1285,7 @@ export default function App() {
                   <div className="log-panel">
                     <div className="log-panel__header">
                       <span className="log-panel__title">NODE LOGS (last 100 lines)</span>
-                      <button className="btn btn-ghost btn-sm" onClick={() => setMg(p=>({...p,logsVisible:false}))}>Tutup</button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => setMg(p=>({...p,logsVisible:false}))}>Close</button>
                     </div>
                     <div className="log-panel__body" style={{maxHeight:300}}>
                       {mg.action==='fetching_logs'
@@ -1317,63 +1320,63 @@ export default function App() {
   const INFO_CONTENT: Record<number, { icon: string; title: string; body: React.ReactElement }> = {
     0: { icon:'🔑', title:'Mnemonic', body: (
       <div className="info-content__body">
-        <p>Mnemonic adalah 24 kata yang berfungsi sebagai kunci utama node dan wallet kamu. Kata pertama selalu <span className="info-mono">scalar</span>, diikuti 23 kata BIP-39 acak (253-bit entropy).</p>
+        <p>Your mnemonic is 24 words that serve as the master key for your node and wallet. The first word is always <span className="info-mono">scalar</span>, followed by 23 random BIP-39 words (253-bit entropy).</p>
         <div className="info-content__callout">
-          Simpan offline — jangan difoto atau disimpan secara digital. Tanpa mnemonic, Node ID dan wallet tidak dapat dibuat ulang.
+          Store offline — do not photograph or store digitally. Without the mnemonic, Node ID and wallet cannot be recreated.
         </div>
-        <p>Mnemonic ini <strong>tidak pernah disimpan</strong> oleh aplikasi. Ini hanya ada di memori selama proses keygen, lalu hilang setelah aplikasi ditutup.</p>
-        <p>Entropi 253-bit memberikan perlindungan 126.5-bit terhadap komputer kuantum (melebihi threshold 128-bit).</p>
+        <p>This application <strong>never stores</strong> your mnemonic. It only exists in memory during the keygen process, and disappears once the app is closed.</p>
+        <p>The 253-bit entropy provides 126.5-bit protection against quantum computers, exceeding the 128-bit threshold.</p>
       </div>
     )},
     1: { icon:'🆔', title:'Node ID', body: (
       <div className="info-content__body">
-        <p>Node ID adalah identitas unik node kamu di jaringan Scalar, direpresentasikan sebagai string hex 64 karakter.</p>
+        <p>The Node ID is your node's unique identity on the Scalar network, represented as a 64-character hex string.</p>
         <div className="info-content__callout">
           Derivasi: <span className="info-mono">BLAKE3(b"scalar_nodeid" || mnemonic || genesis_hash)</span> — instan, kurang dari 1 ms.
         </div>
-        <p>Properti kunci: input yang sama selalu menghasilkan Node ID yang sama (deterministik). Tidak bisa dibalik ke mnemonic (one-way function).</p>
-        <p>Satu mnemonic menghasilkan satu Node ID. Untuk menjalankan beberapa node, kamu memerlukan beberapa mnemonic yang berbeda.</p>
+        <p>Key property: the same inputs always produce the same Node ID (deterministic). It cannot be reversed back to the mnemonic (one-way function).</p>
+        <p>One mnemonic produces one Node ID. To run multiple nodes, you need separate mnemonics.</p>
       </div>
     )},
     2: { icon:'🔒', title:'Keystore', body: (
       <div className="info-content__body">
-        <p>Keystore adalah file 121 bytes terenkripsi yang menyimpan Node ID dan Node Key kamu. File ini yang dikirim ke VPS untuk menjalankan node.</p>
+        <p>The keystore is an encrypted 121-byte file that stores your Node ID and Node Key. This file is sent to the VPS to run the node.</p>
         <div className="info-content__callout">
-          Aman dikirim via SSH — tanpa passphrase yang benar, file ini tidak dapat dibuka. Node Key di dalamnya tidak sama dengan SpendKey (koin tetap aman jika VPS dikompromis).
+          Safe to send via SSH — without the correct passphrase, this file cannot be opened. The Node Key inside is separate from the SpendKey (coins remain safe if the VPS is compromised).
         </div>
-        <p>Format: <span className="info-mono">version(1) + kdf_salt(16) + nonce(24) + ciphertext(80)</span> = 121 bytes total. Enkripsi menggunakan Argon2id 64MB + XChaCha20-Poly1305.</p>
+        <p>Format: <span className="info-mono">version(1) + kdf_salt(16) + nonce(24) + ciphertext(80)</span> = 121 bytes total. Encrypted using Argon2id 64MB + XChaCha20-Poly1305.</p>
       </div>
     )},
     3: { icon:'🔐', title:'Passphrase', body: (
       <div className="info-content__body">
-        <p>Passphrase melindungi keystore di disk. Diperlukan setiap kali node dijalankan untuk membuka keystore. Minimum 8 karakter.</p>
+        <p>The passphrase protects the keystore on disk. Required every time the node starts to decrypt the keystore. Minimum 8 characters.</p>
         <div className="info-content__callout callout--warn">
-          Passphrase tidak dapat dipulihkan — simpan bersama mnemonic di tempat aman. Jika lupa, kamu harus membuat keystore baru dari mnemonic yang sama.
+          The passphrase cannot be recovered — store it alongside your mnemonic in a safe place. If forgotten, you must create a new keystore from the same mnemonic.
         </div>
-        <p>Kekuatan passphrase sangat penting. Tanggal lahir (contoh: 01011990) memiliki entropi ~13 bit dan dapat ditebak dalam hitungan menit meski dilindungi Argon2id. Gunakan passphrase random minimal 12 karakter.</p>
+        <p>Passphrase strength is critical. A birthdate (e.g. 01011990) has ~13 bits of entropy and can be guessed in minutes even with Argon2id protection. Use a random passphrase of at least 12 characters.</p>
       </div>
     )},
     4: { icon:'#️⃣', title:'Genesis Hash', body: (
       <div className="info-content__body">
-        <p>Genesis hash adalah 64-karakter hex dari blok genesis jaringan Scalar. Hash ini mengikat Node ID kamu ke jaringan yang spesifik.</p>
+        <p>The genesis hash is the 64-character hex of the Scalar network's genesis block. It binds your Node ID to a specific network.</p>
         <div className="info-content__callout">
-          Testnet dan mainnet memiliki genesis hash yang berbeda. Menggunakan genesis hash yang salah akan menghasilkan Node ID yang berbeda, dan node tidak akan bisa bergabung ke jaringan.
+          Testnet and mainnet have different genesis hashes. Using the wrong hash produces a different Node ID, and the node will not be able to join the network.
         </div>
-        <p>Dapatkan genesis hash resmi di <strong>scalar.network/genesis</strong>. Jangan gunakan nilai yang tidak terverifikasi.</p>
+        <p>Get the official genesis hash at <strong>scalar.network/genesis</strong>. Do not use unverified values.</p>
       </div>
     )},
     5: { icon:'📊', title:'NodeScore', body: (
       <div className="info-content__body">
-        <p>NodeScore adalah skor performa node (0–1.000.000) yang ditentukan oleh tiga faktor: uptime, alignment root, dan longevity.</p>
+        <p>NodeScore is a node performance score (0–1,000,000) determined by three factors: uptime, root alignment, and longevity.</p>
         <div className="info-content__callout">
-          Node dengan NodeScore di atas 800.000 eligible untuk peran agregator jaringan dan memiliki Governance Power penuh (cap 1.000.000). Node di bawah threshold dibatasi Governance Power hingga 200.000.
+          Nodes with NodeScore above 800,000 are eligible for network aggregator roles and have full Governance Power (cap 1,000,000). Nodes below the threshold are limited to 200,000 Governance Power.
         </div>
-        <p>NodeScore meningkat seiring waktu node berjalan dengan konsisten. Restarting atau downtime yang sering akan menurunkan skor secara signifikan melalui komponen longevity.</p>
+        <p>NodeScore increases as the node runs consistently over time. Frequent restarts or downtime will significantly reduce the score through the longevity component.</p>
       </div>
     )},
     6: { icon:'🗺️', title:'Complete Usage Flow', body: (
       <div className="info-content__body">
-        <p>Tiga langkah utama untuk menjalankan node Scalar:</p>
+        <p>Three main steps to run a Scalar node:</p>
         <div className="flow-diagram">
           <div className="flow-step">
             <div className="flow-step__num">1</div>
@@ -1390,11 +1393,11 @@ export default function App() {
             <div className="flow-step__label">MANAGE</div>
           </div>
         </div>
-        <p><strong>1. Keygen</strong> — Generate mnemonic 24 kata, konfirmasi 3 titik, set passphrase, masukkan genesis hash. Keystore terenkripsi dan wallet address siap.</p>
-        <p><strong>2. Deploy</strong> — Pilih server VPS, paste keystore, masukkan passphrase dan genesis hash, lalu deploy. Scalar node berjalan sebagai systemd service.</p>
-        <p><strong>3. Manage</strong> — Pantau status node, lihat log, start/stop, atau reset VPS jika diperlukan sebelum deploy ulang.</p>
+        <p><strong>1. Keygen</strong> — Generate a 24-word mnemonic, confirm 3 checkpoints, set passphrase, enter genesis hash. Encrypted keystore and wallet address are ready.</p>
+        <p><strong>2. Deploy</strong> — Select a VPS server, paste the keystore, enter passphrase and genesis hash, then deploy. The Scalar node runs as a systemd service.</p>
+        <p><strong>3. Manage</strong> — Monitor node status, view logs, start/stop, or reset the VPS if needed before re-deploying.</p>
         <div className="info-content__callout">
-          Mnemonic tidak pernah meninggalkan perangkat kamu. Hanya keystore (121 bytes terenkripsi) yang dikirim ke VPS via SSH.
+          The mnemonic never leaves your device. Only the keystore (121 encrypted bytes) is sent to the VPS via SSH.
         </div>
       </div>
     )},
@@ -1484,14 +1487,14 @@ export default function App() {
           <div className="settings-card__body">
             <div className="settings-row" style={{alignItems:'flex-start',flexDirection:'column',gap:'var(--s3)'}}>
               <p style={{fontSize:12,color:'#71717A'}}>
-                Gunakan ini sebelum menginstall versi baru. Semua proses akan dihentikan.
+                Use this before installing a new version. All processes will be terminated.
               </p>
               <button className="btn btn-danger" onClick={() => setModal({
-                title:'Tutup Aplikasi?',
-                body:'Semua proses akan dihentikan. Pastikan tidak ada operasi deploy atau reset yang sedang berjalan.',
+                title:'Close Application?',
+                body:'All processes will be terminated. Ensure no deploy or reset operations are running.',
                 onConfirm: () => invoke('quit_app').catch(()=>{})
               })}>
-                <IPower/> Tutup Aplikasi
+                <IPower/> Close Application
               </button>
             </div>
           </div>
