@@ -705,7 +705,7 @@ export default function App() {
           <div>
             <h1 className="t-display mb-3">Confirm Your Backup</h1>
             <p className="t-sub mb-5">Enter the words at positions <strong style={{color:'#fff'}}>7</strong>, <strong style={{color:'#fff'}}>14</strong>, and <strong style={{color:'#fff'}}>21</strong></p>
-            <div className="col gap-4" style={{maxWidth:360}}>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'var(--s4)',marginBottom:'var(--s5)'}}>
               {([
                 {n:7,k:'word7' as const,err:'word7Err' as const},
                 {n:14,k:'word14' as const,err:'word14Err' as const},
@@ -730,13 +730,13 @@ export default function App() {
                   {kg[err]&&<span className="fld-err">Incorrect. Check your written backup.</span>}
                 </div>
               ))}
-              <div style={{display:'flex',justifyContent:'space-between',marginTop:'var(--s2)'}}>
-                <button className="btn btn-ghost"
-                  onClick={()=>setKg(p=>({...p,step:'mnemonic',word7:'',word14:'',word21:'',word7Err:'',word14Err:'',word21Err:''}))}>← Back</button>
-                <button className="btn btn-primary"
-                  disabled={!kg.word7.trim()||!kg.word14.trim()||!kg.word21.trim()}
-                  onClick={onConfirmWords}>Continue →</button>
-              </div>
+            </div>
+            <div style={{display:'flex',justifyContent:'space-between'}}>
+              <button className="btn btn-ghost"
+                onClick={()=>setKg(p=>({...p,step:'mnemonic',word7:'',word14:'',word21:'',word7Err:'',word14Err:'',word21Err:''}))}>← Back</button>
+              <button className="btn btn-primary"
+                disabled={!kg.word7.trim()||!kg.word14.trim()||!kg.word21.trim()}
+                onClick={onConfirmWords}>Continue →</button>
             </div>
           </div>
         </div>
