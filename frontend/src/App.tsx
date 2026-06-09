@@ -450,8 +450,8 @@ export default function App() {
   // ═══════════════════════════════════════════════════════════════
   const renderSidebar = () => (
     <aside className="sidebar">
-      <div className="sidebar__logo" style={{justifyContent:'center'}}>
-        <img src={logoImg} alt="Scalar" style={{height:29,maxWidth:'calc(var(--sidebar-w) - 40px)',objectFit:'contain',filter:'brightness(0) invert(1)'}}/>
+      <div className="sidebar__logo" style={{justifyContent:'flex-start'}}>
+        <img src={logoImg} alt="Scalar" style={{height:23,maxWidth:'calc(var(--sidebar-w) - 40px)',objectFit:'contain',filter:'brightness(0) invert(1)'}}/>
       </div>
       <hr className="sidebar__divider"/>
 
@@ -1041,7 +1041,10 @@ export default function App() {
     )
     return (
       <div>
-        <div style={{marginBottom:'var(--s6)'}}></div>
+        <div style={{marginBottom:'var(--s5)'}}>
+          <h1 className="t-display" style={{marginBottom:'var(--s2)'}}>Deploy Node to VPS</h1>
+          <p className="t-sub">Configure server connections and deploy the scalar-node binary.</p>
+        </div>
         <div className="deploy-layout">
           {/* Left: Server Management */}
           <div className="deploy-left">
@@ -1169,7 +1172,10 @@ export default function App() {
     )
     return (
       <div>
-        <div style={{marginBottom:'var(--s5)'}}></div>
+        <div style={{marginBottom:'var(--s5)'}}>
+          <h1 className="t-display" style={{marginBottom:'var(--s2)'}}>Manage Nodes</h1>
+          <p className="t-sub">Monitor status, view logs, and control your running nodes.</p>
+        </div>
         <div className="manage-layout">
           {/* Left: Server list */}
           <div className="manage-left">
@@ -1488,7 +1494,10 @@ export default function App() {
 
   const renderInfo = () => (
     <div>
-      <div style={{marginBottom:'var(--s5)'}}></div>
+      <div style={{marginBottom:'var(--s5)'}}>
+        <h1 className="t-display" style={{marginBottom:'var(--s2)'}}>Node Operator Guide</h1>
+        <p className="t-sub">Essential concepts for running a Scalar node.</p>
+      </div>
       <div className="info-layout">
         <nav className="info-nav">
           {INFO_TOPICS.map((t, i) => (
@@ -1513,27 +1522,11 @@ export default function App() {
   // ═══════════════════════════════════════════════════════════════
   const renderSettings = () => (
     <div>
-      <div style={{marginBottom:'var(--s5)'}}></div>
+      <div style={{marginBottom:'var(--s5)'}}>
+        <h1 className="t-display" style={{marginBottom:'var(--s2)'}}>Settings</h1>
+        <p className="t-sub">Configure application preferences and deployment options.</p>
+      </div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'var(--s5)',alignItems:'start'}}>
-        <div>
-        <div className="settings-card">
-          <div className="settings-card__header">
-            <IGear/><span className="settings-card__title">Deployment Configuration</span>
-          </div>
-          <div className="settings-card__body">
-            <div className="settings-row">
-              <div className="settings-row__info">
-                <span className="settings-row__label">SSH Deployment Mode</span>
-                <span className="settings-row__sub">Local SSH key used for server access</span>
-              </div>
-              <select className="inp" style={{width:160}}>
-                <option>Local SSH</option>
-              </select>
-            </div>
-          </div>
-        </div>
-        </div>
-
         <div style={{display:'flex',flexDirection:'column',gap:'var(--s5)'}}>
         <div className="settings-card">
           <div className="settings-card__header">
@@ -1581,6 +1574,25 @@ export default function App() {
               })}>
                 <IPower/> Close Application
               </button>
+            </div>
+          </div>
+        </div>
+        </div>
+
+        <div>
+        <div className="settings-card">
+          <div className="settings-card__header">
+            <IGear/><span className="settings-card__title">Deployment Configuration</span>
+          </div>
+          <div className="settings-card__body">
+            <div className="settings-row">
+              <div className="settings-row__info">
+                <span className="settings-row__label">SSH Deployment Mode</span>
+                <span className="settings-row__sub">Local SSH key used for server access</span>
+              </div>
+              <select className="inp" style={{width:160}}>
+                <option>Local SSH</option>
+              </select>
             </div>
           </div>
         </div>
