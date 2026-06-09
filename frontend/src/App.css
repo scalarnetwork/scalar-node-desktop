@@ -1376,3 +1376,55 @@ select.inp option { background: var(--surf-03); color: var(--t1); }
 .w-full { width: 100%; }
 .text-right { text-align: right; }
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* ══════════════════════════════════════════════════
+   KEYGEN LAYOUT FIX (ditambahkan otomatis)
+   Membungkus setiap step dengan card yang seragam
+   dan navigasi yang selalu di bawah.
+══════════════════════════════════════════════════ */
+.kg-step-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 420px; /* tinggi minimum yang sama untuk semua step */
+  width: 100%;
+}
+
+/* Konten utama dalam step akan mengisi ruang yang tersedia */
+.kg-step-content {
+  flex: 1;
+}
+
+/* Navigasi Back/Continue selalu di bawah */
+.kg-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  margin-top: var(--s5);
+  padding-top: var(--s4);
+  border-top: 1px solid var(--bdr-subtle);
+}
+
+.kg-nav .flex-1 { flex: 1; }
+
+/* ══════════════════════════════════════════════════
+   KEYGEN LAYOUT FIX
+══════════════════════════════════════════════════ */
+.kg-step-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 420px;
+  width: 100%;
+}
+.kg-step-content {
+  flex: 1;
+}
+.kg-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  margin-top: var(--s5);
+  padding-top: var(--s4);
+  border-top: 1px solid var(--bdr-subtle);
+}
+.kg-nav .flex-1 { flex: 1; }
